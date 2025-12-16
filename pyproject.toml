@@ -1,0 +1,74 @@
+[project]
+name = "delphi-build-mcp-server"
+version = "1.0.0"
+description = "MCP server for compiling Delphi projects with AI coding agents"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Delphi MCP Server Team"}
+]
+keywords = ["mcp", "delphi", "compiler", "embarcadero", "rad-studio"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+    "tomli>=2.0.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/delphi-build-mcp-server"
+Documentation = "https://github.com/your-org/delphi-build-mcp-server/blob/main/DOCUMENTATION.md"
+Repository = "https://github.com/your-org/delphi-build-mcp-server"
+Issues = "https://github.com/your-org/delphi-build-mcp-server/issues"
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "COM", "C4", "ISC", "ICN", "PIE", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "ERA", "PL", "TRY", "RUF"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=html --cov-report=term"
