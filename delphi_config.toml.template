@@ -1,0 +1,186 @@
+# Delphi Build MCP Server Configuration Template
+#
+# This file configures the Delphi command-line compiler for use with the MCP server.
+# Copy this file to 'delphi_config.toml' and customize the paths for your environment.
+#
+# Environment Variables:
+# You can use ${VAR_NAME} syntax to reference environment variables.
+# Common variables: ${USERNAME}, ${USERPROFILE}, ${PROGRAMFILES}, ${PROGRAMFILES(X86)}
+
+# =============================================================================
+# Delphi Installation Configuration
+# =============================================================================
+[delphi]
+# Delphi version number (e.g., "23.0" for Delphi 12, "22.0" for Delphi 11)
+version = "23.0"
+
+# Root directory of your Delphi installation
+# Default for Delphi 12: C:/Program Files (x86)/Embarcadero/Studio/23.0
+root_path = "C:/Program Files (x86)/Embarcadero/Studio/23.0"
+
+# Compiler executables (auto-detected if not specified)
+# compiler_win32 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc32.exe"
+# compiler_win64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc64.exe"
+
+# =============================================================================
+# System Library Paths (Required)
+# =============================================================================
+[paths.system]
+# RTL (Runtime Library) source path
+rtl = "C:/Program Files (x86)/Embarcadero/Studio/23.0/source/rtl/common"
+
+# VCL (Visual Component Library) source path
+vcl = "C:/Program Files (x86)/Embarcadero/Studio/23.0/source/vcl"
+
+# Compiled library paths for different platforms and configurations
+lib_win32_release = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/release"
+lib_win32_debug = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/debug"
+lib_win64_release = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64/release"
+lib_win64_debug = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64/debug"
+
+# =============================================================================
+# Third-Party Library Paths (Optional - comment out if not installed)
+# =============================================================================
+[paths.libraries]
+
+# DUnitX Testing Framework
+# Source: Built into RAD Studio
+dunitx = "C:/Program Files (x86)/Embarcadero/Studio/23.0/source/DunitX"
+
+# Delphi-Mocks - Mocking framework for unit tests
+# Source: https://github.com/VSoftTechnologies/Delphi-Mocks
+# Note: Adjust this path if installed in a different location (e.g., external/ subfolder)
+delphi_mocks = "C:/git_local/your-project/external/Delphi-Mocks"
+
+# TestInsight - Visual test runner
+# Source: https://bitbucket.org/sglienke/testinsight/
+testinsight = "C:/Users/${USERNAME}/AppData/Local/Programs/TestInsight/Source"
+
+# JEDI Code Library (JCL) - Multiple paths required
+# Source: GetIt Package Manager or https://github.com/project-jedi/jcl
+jcl_include = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDICodeLibraryJCL/source/include"
+jcl_bin = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDICodeLibraryJCL/lib/d29/win32"
+jcl_windows = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDICodeLibraryJCL/source/windows"
+
+# JEDI Visual Component Library (JVCL) - Multiple paths required
+# Source: GetIt Package Manager or https://github.com/project-jedi/jvcl
+jvcl_lib = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDIVisualComponentLibraryJVCL/lib/D29/win32"
+jvcl_common = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDIVisualComponentLibraryJVCL/common"
+jvcl_resources = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/JEDIVisualComponentLibraryJVCL/Resources"
+
+# Abbrevia - Compression library
+# Source: GetIt Package Manager
+abbrevia = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/Abbrevia-12-64bit/source"
+
+# TurboPower LockBox - Encryption library (Multiple paths required)
+# Source: GetIt Package Manager
+lockbox_design = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/design"
+lockbox_surface = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/library surface"
+lockbox_ciphers = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/ciphers"
+lockbox_crypto = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/cryptography"
+lockbox_hashes = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/hashes"
+lockbox_rsa = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/RSA"
+lockbox_utils = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/LockBox-12-64bit/run/utilities"
+
+# Delphi-Markdown - Markdown parser
+# Source: https://github.com/grahamegrieve/delphi-markdown
+markdown = "C:/Delphi_libs/D12/delphi-markdown/source"
+
+# LoggerPro (DMVC Framework) - Logging framework
+# Source: https://github.com/danieleteti/loggerpro
+loggerpro = "C:/Delphi_libs/D12/dmvcframework/lib/loggerpro"
+
+# =============================================================================
+# Project-Specific Paths (Optional)
+# =============================================================================
+[paths.project]
+# Add your project-specific source directories here
+# These will be added to the search path automatically
+# Example:
+# src = "C:/MyProject/src"
+# lib = "C:/MyProject/lib"
+# vendor = "C:/MyProject/vendor"
+
+# =============================================================================
+# Compiler Settings
+# =============================================================================
+# NOTE: Build-specific compiler flags (optimization, debug info, defines, etc.)
+# are automatically read from your .dproj file. You don't need to configure
+# them here. The MCP server will use whatever configuration is active in your
+# project (Debug, Release, or custom).
+
+# =============================================================================
+# Namespace Prefixes
+# =============================================================================
+[compiler.namespaces]
+# Namespace prefixes for unit lookup (equivalent to -NS flag)
+# Order matters: searched left to right
+prefixes = [
+    "Winapi",
+    "System.Win",
+    "Data.Win",
+    "Datasnap.Win",
+    "Web.Win",
+    "Soap.Win",
+    "Xml.Win",
+    "Bde",
+    "System",
+    "Xml",
+    "Data",
+    "Datasnap",
+    "Web",
+    "Soap",
+    "Vcl"
+]
+
+# =============================================================================
+# Unit Aliases
+# =============================================================================
+[compiler.aliases]
+# Unit name aliases (equivalent to -A flag)
+# Format: "OldName=NewName"
+# These allow old-style unit names to map to namespaced units
+"Generics.Collections" = "System.Generics.Collections"
+"Generics.Defaults" = "System.Generics.Defaults"
+"WinTypes" = "Winapi.Windows"
+"WinProcs" = "Winapi.Windows"
+"DbiTypes" = "BDE"
+"DbiProcs" = "BDE"
+"DbiErrs" = "BDE"
+"SysUtils" = "System.SysUtils"
+"StrUtils" = "System.StrUtils"
+"Classes" = "System.Classes"
+"Math" = "System.Math"
+"Variants" = "System.Variants"
+"Types" = "System.Types"
+
+
+# =============================================================================
+# NOTES
+# =============================================================================
+#
+# 1. Path Separators:
+#    Use forward slashes (/) in paths - they work on Windows and are easier to read.
+#    Backslashes (\) must be escaped as (\\).
+#
+# 2. Missing Paths:
+#    The MCP server will warn about missing library paths but will continue.
+#    Only the [delphi] and [paths.system] sections are strictly required.
+#
+# 3. Relative Paths:
+#    All paths should be absolute. Relative paths are resolved from the
+#    location of this configuration file.
+#
+# 4. Testing Your Configuration:
+#    After creating your config file, test it with a simple project to ensure
+#    all paths are correct and the compiler can find its dependencies.
+#
+# 5. Version-Specific Paths:
+#    The "d29" in JCL/JVCL paths refers to Delphi's internal version number:
+#    - Delphi 11: d28
+#    - Delphi 12: d29
+#    - Delphi 13: d30 (adjust paths accordingly for your version)
+#
+# 6. GetIt Package Manager:
+#    Many libraries installed via GetIt go to:
+#    C:/Users/${USERNAME}/Documents/Embarcadero/Studio/23.0/CatalogRepository/
