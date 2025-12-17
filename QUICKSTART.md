@@ -305,6 +305,6 @@ The server is now ready to compile your projects.
 
 ## Support
 
-- **Issues**: https://github.com/your-org/delphi-build-mcp-server/issues
-- **Discussions**: https://github.com/your-org/delphi-build-mcp-server/discussions
+- **Issues**: https://github.com/Basti-Fantasti/delphi-build-mcp-server/issues
+- **Discussions**: https://github.com/Basti-Fantasti/delphi-build-mcp-server/discussions
 - **Documentation**: [DOCUMENTATION.md](DOCUMENTATION.md)

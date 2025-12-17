@@ -332,7 +332,7 @@ Apache-2.0 License - see LICENSE file for details.
 
 - **Documentation**: [DOCUMENTATION.md](DOCUMENTATION.md)
 - **Quick Start**: [QUICKSTART.md](QUICKSTART.md)
-- **Issues**: https://github.com/your-org/delphi-build-mcp-server/issues
+- **Issues**: https://github.com/Basti-Fantasti/delphi-build-mcp-server/issues
 
 ## Acknowledgments
 
