@@ -2,6 +2,30 @@
 
 A Model Context Protocol (MCP) server that enables AI coding agents like Claude Code to compile Delphi projects programmatically.
 
+## Why Use This Server?
+
+Calling the Delphi compiler directly from Claude Code works, but this MCP server provides significant advantages:
+
+| Advantage | Direct Compiler Call | This MCP Server |
+|-----------|---------------------|-----------------|
+| **Library Paths** | Manually specify 80+ paths every time | Loaded automatically from config |
+| **Command Line Limits** | Fails silently at ~8000 chars | Auto-uses response files |
+| **Build Settings** | Must read .dproj manually | Parsed automatically |
+| **Compiler Output** | Raw text with warnings/hints | Filtered to errors only |
+| **Error Format** | Parse text yourself | Structured (file, line, column) |
+| **Token Usage** | Full verbose output | Minimal, focused response |
+| **Localization** | English output only | English + German support |
+| **Path Portability** | Hardcoded paths | `${USERNAME}` expansion |
+| **Platform Selection** | Manual dcc32/dcc64 choice | Automatic based on target |
+| **Consistency** | Varies by invocation | Matches IDE settings exactly |
+
+**Key Benefits:**
+
+1. **Reduced Token Usage** - Filters out warnings, hints, and verbose output, keeping Claude's context focused and reducing API costs
+2. **No Command Line Limits** - Automatically handles projects with 80+ library paths using response files
+3. **Zero Configuration Per-Call** - All paths and settings loaded from a one-time generated config file
+4. **Precise Error Locations** - Structured results enable Claude to navigate directly to the error location
+
 ## Features
 
 - **Automatic Configuration**: Generate config from IDE build logs with multi-line parsing
