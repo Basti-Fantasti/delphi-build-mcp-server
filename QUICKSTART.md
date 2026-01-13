@@ -26,14 +26,15 @@ Then install the MCP server:
 cd delphi-build-mcp-server
 
 # Create virtual environment and install dependencies
-uv sync
+uv venv
+uv pip install -e .
 ```
 
 ## Step 2: Generate Configuration from IDE Build Log
 
 The config generator uses **multi-line parsing** with `re.DOTALL` to extract 80+ library paths from your IDE build log. This is fully functional and tested.
 
-### 2.1 Create a Build Log in Delphi IDE
+### 2.1 Create Build Log(s) in Delphi IDE
 
 1. Open your Delphi project in the IDE
 2. Go to **Tools → Options → Building → Compiling and Running**
@@ -43,6 +44,14 @@ The config generator uses **multi-line parsing** with `re.DOTALL` to extract 80+
 6. Right-click in the Messages pane → **Copy All**
 7. Save to a file named `build.log`
 
+**For Multi-Platform Projects (Win32/Win64/Linux64):**
+1. Build with each Platform/Config combination you need
+2. Save each build log separately:
+   - `build_debug_win32.log`
+   - `build_release_win32.log`
+   - `build_debug_linux64.log`
+   - etc.
+
 **Alternative Method:**
 - In the Messages window, click **View → Message View Options**
 - Enable "Save messages to file"
@@ -51,18 +60,41 @@ The config generator uses **multi-line parsing** with `re.DOTALL` to extract 80+
 
 ### 2.2 Generate Config File
 
-Run the config generator:
+**Single Build Log (Simple Projects):**
 
 ```bash
 uv run python -m src.config_generator build.log
 ```
 
-Or use the MCP tool from Claude Code:
+**Multiple Build Logs (Multi-Platform Projects):**
+
+Use the MCP tool from Claude Code:
 ```
-Please generate a Delphi configuration from my build log at C:\path\to\build.log
+Please generate a Delphi configuration from these build logs:
+- X:\path\to\build_debug_win32.log
+- X:\path\to\build_release_win32.log
+- X:\path\to\build_debug_linux64.log
 ```
 
-This creates `delphi_config.toml` with all library paths automatically configured.
+Or use the Python API:
+```python
+from src.multi_config_generator import MultiConfigGenerator
+from pathlib import Path
+
+generator = MultiConfigGenerator(use_env_vars=True)
+result = generator.generate_from_build_logs(
+    build_log_paths=[
+        "build_debug_win32.log",
+        "build_release_linux64.log"
+    ],
+    output_path=Path("delphi_config.toml")
+)
+```
+
+This creates a unified `delphi_config.toml` with:
+- Common library paths shared across all configurations
+- Platform-specific paths (e.g., Linux64 SDK paths)
+- Configuration-specific compiler flags (e.g., `--libpath` for Linux64)
 
 ## Step 3: Configure Claude Code
 
@@ -82,12 +114,12 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
       "args": [
         "run",
         "--directory",
-        "C:\\path\\to\\delphi-build-mcp-server",
+        "X:\\path\\to\\delphi-build-mcp-server",
         "python",
         "main.py"
       ],
       "env": {
-        "DELPHI_CONFIG": "C:\\path\\to\\delphi_config.toml"
+        "DELPHI_CONFIG": "X:\\path\\to\\delphi_config.toml"
       }
     }
   }
@@ -100,12 +132,12 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 {
   "mcpServers": {
     "delphi-build": {
-      "command": "C:\\path\\to\\delphi-build-mcp-server\\.venv\\Scripts\\python.exe",
+      "command": "X:\\path\\to\\delphi-build-mcp-server\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\path\\to\\delphi-build-mcp-server\\main.py"
+        "X:\\path\\to\\delphi-build-mcp-server\\main.py"
       ],
       "env": {
-        "DELPHI_CONFIG": "C:\\path\\to\\delphi_config.toml"
+        "DELPHI_CONFIG": "X:\\path\\to\\delphi_config.toml"
       }
     }
   }
@@ -184,7 +216,7 @@ If everything is working, you should see:
   "exit_code": 0,
   "errors": [],
   "compilation_time_seconds": 2.5,
-  "output_executable": "C:\\MyProject\\Win32\\Debug\\MyApp.exe"
+  "output_executable": "X:\\MyProject\\Win32\\Debug\\MyApp.exe"
 }
 ```
 
@@ -210,7 +242,7 @@ root_path = "C:/Program Files (x86)/Embarcadero/Studio/23.0"  # Verify this path
 ```toml
 [paths.libraries]
 # ... existing paths ...
-missing_library = "C:/path/to/missing/library"
+missing_library = "X:/path/to/missing/library"
 ```
 
 3. **Use the project's original search paths** by ensuring the .dproj file is up to date
@@ -234,6 +266,8 @@ The MCP server handles these automatically - no configuration needed:
 - ✅ **Multi-Line Parsing**: Extracts 80+ paths from complex build logs
 - ✅ **Smart Path Handling**: RTL/VCL source paths excluded (only lib_*.dcu used)
 - ✅ **80+ Library Support**: Handles projects with extensive dependencies
+- ✅ **Cross-Platform**: Supports Win32, Win64, and Linux64 compilation
+- ✅ **Multi-Config**: Generate unified config from multiple build logs (Debug/Release × platforms)
 
 ## Next Steps
 
@@ -295,6 +329,34 @@ Perfect! I've generated delphi_config.toml with 47 library paths.
 The server is now ready to compile your projects.
 ```
 
+### Workflow 4: Multi-Platform Linux64 Setup
+
+```
+User: I need to compile my project for both Windows and Linux.
+
+Claude: I'll help you set up cross-platform compilation. Please:
+
+1. In Delphi IDE, select Platform = Win32, Config = Debug
+2. Build the project and save the build log as build_debug_win32.log
+3. Select Platform = Linux64, Config = Debug
+4. Build and save as build_debug_linux64.log
+
+[User provides logs]
+
+I'll generate a unified config from both build logs...
+
+[Uses generate_config_from_multiple_build_logs tool]
+
+Done! Your delphi_config.toml now supports both platforms.
+Let me compile for Linux64 to verify...
+
+[Compiles with override_platform: "Linux64"]
+
+Success! Your project compiles for:
+- Win32 Debug: 1.05s
+- Linux64 Debug: 2.72s
+```
+
 ## Tips
 
 1. **Always use .dproj files** - They contain all compiler settings and ensure IDE-matching behavior
@@ -305,6 +367,6 @@ The server is now ready to compile your projects.
 
 ## Support
 
-- **Issues**: https://github.com/Basti-Fantasti/delphi-build-mcp-server/issues
-- **Discussions**: https://github.com/Basti-Fantasti/delphi-build-mcp-server/discussions
+- **Issues**: https://github.com/your-org/delphi-build-mcp-server/issues
+- **Discussions**: https://github.com/your-org/delphi-build-mcp-server/discussions
 - **Documentation**: [DOCUMENTATION.md](DOCUMENTATION.md)

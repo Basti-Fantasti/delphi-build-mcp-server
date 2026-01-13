@@ -87,6 +87,7 @@ class DelphiCompiler:
             force_build_all=force_build_all,
             additional_search_paths=additional_search_paths or [],
             additional_flags=additional_flags or [],
+            platform=platform,
         )
 
         # Execute compilation
@@ -101,7 +102,7 @@ class DelphiCompiler:
         # Determine output executable path
         output_exe = None
         if exit_code == 0:
-            output_exe = self._find_output_executable(project_path, dproj_settings)
+            output_exe = self._find_output_executable(project_path, dproj_settings, platform)
 
         return CompilationResult(
             success=exit_code == 0,
@@ -151,6 +152,7 @@ class DelphiCompiler:
         force_build_all: bool,
         additional_search_paths: list[str],
         additional_flags: list[str],
+        platform: str = "Win32",
     ) -> list[str]:
         """Build the complete compiler command line.
 
@@ -161,6 +163,7 @@ class DelphiCompiler:
             force_build_all: Whether to force rebuild all
             additional_search_paths: Extra search paths
             additional_flags: Additional compiler flags
+            platform: Target platform ("Win32", "Win64", or "Linux64")
 
         Returns:
             Command as list of arguments
@@ -198,7 +201,7 @@ class DelphiCompiler:
         all_search_paths = []
 
         # Add config file paths (global paths from delphi_config.toml)
-        all_search_paths.extend(self.config_loader.get_all_search_paths())
+        all_search_paths.extend(self.config_loader.get_all_search_paths(platform))
 
         # Add .dproj search paths (project-specific paths)
         if dproj_settings:
@@ -244,6 +247,18 @@ class DelphiCompiler:
                 command.append(f"-E{dproj_settings.output_dir}")
             if dproj_settings.dcu_output_dir:
                 command.append(f"-NU{dproj_settings.dcu_output_dir}")
+
+        # Add Linux SDK options for cross-compilation
+        if platform == "Linux64":
+            sdk_sysroot = self.config_loader.get_linux_sdk_sysroot()
+            sdk_libpaths = self.config_loader.get_linux_sdk_libpaths()
+
+            if sdk_sysroot:
+                command.append(f"--syslibroot:{sdk_sysroot}")
+
+            if sdk_libpaths:
+                libpath_str = ";".join(str(p) for p in sdk_libpaths)
+                command.append(f"--libpath:{libpath_str}")
 
         # Add additional flags from caller
         command.extend(additional_flags)
@@ -365,34 +380,54 @@ class DelphiCompiler:
             return f"Compiler execution failed: {e}", 1
 
     def _find_output_executable(
-        self, project_path: Path, dproj_settings: Optional[any]
+        self, project_path: Path, dproj_settings: Optional[any], platform: str = "Win32"
     ) -> Optional[Path]:
         """Find the output executable after successful compilation.
 
         Args:
             project_path: Project file path
             dproj_settings: .dproj settings (if available)
+            platform: Target platform ("Win32", "Win64", or "Linux64")
 
         Returns:
             Path to output executable, or None if not found
         """
+        # Determine file extension based on platform
+        if platform == "Linux64":
+            # Linux executables have no extension
+            exe_extension = ""
+        else:
+            exe_extension = ".exe"
+
         # Check if .dproj specifies output directory
         if dproj_settings and dproj_settings.output_dir:
-            exe_name = project_path.stem + ".exe"
+            exe_name = project_path.stem + exe_extension
             exe_path = dproj_settings.output_dir / exe_name
             if exe_path.exists():
                 return exe_path
 
         # Check default location (same directory as project)
-        exe_path = project_path.with_suffix(".exe")
+        if exe_extension:
+            exe_path = project_path.with_suffix(exe_extension)
+        else:
+            exe_path = project_path.with_suffix("")
         if exe_path.exists():
             return exe_path
 
-        # Check Win32/Debug and Win32/Release directories
+        # Check platform-specific directories
         project_dir = project_path.parent
-        exe_name = project_path.stem + ".exe"
+        exe_name = project_path.stem + exe_extension
 
-        for subdir in ["Win32/Debug", "Win32/Release", "Win64/Debug", "Win64/Release"]:
+        # Platform-specific subdirectories to search
+        subdirs = []
+        if platform == "Win32":
+            subdirs = ["Win32/Debug", "Win32/Release"]
+        elif platform == "Win64":
+            subdirs = ["Win64/Debug", "Win64/Release"]
+        elif platform == "Linux64":
+            subdirs = ["Linux64/Debug", "Linux64/Release"]
+
+        for subdir in subdirs:
             exe_path = project_dir / subdir / exe_name
             if exe_path.exists():
                 return exe_path

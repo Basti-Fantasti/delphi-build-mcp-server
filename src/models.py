@@ -12,6 +12,7 @@ class Platform(str, Enum):
 
     WIN32 = "Win32"
     WIN64 = "Win64"
+    LINUX64 = "Linux64"
 
 
 class BuildConfig(str, Enum):
@@ -60,7 +61,7 @@ class DetectedInfo(BaseModel):
     """Information detected from a build log."""
 
     delphi_version: str = Field(description="Detected Delphi version")
-    platform: str = Field(description="Detected platform (Win32/Win64)")
+    platform: str = Field(description="Detected platform (Win32/Win64/Linux64)")
     build_config: str = Field(description="Detected build configuration (Debug/Release)")
     compiler_executable: str = Field(description="Path to compiler executable")
 
@@ -86,8 +87,11 @@ class DelphiConfig(BaseModel):
     compiler_win64: Optional[Path] = Field(
         default=None, description="Override path to dcc64.exe"
     )
+    compiler_linux64: Optional[Path] = Field(
+        default=None, description="Override path to dcclinux64.exe"
+    )
 
-    @field_validator("root_path", "compiler_win32", "compiler_win64", mode="before")
+    @field_validator("root_path", "compiler_win32", "compiler_win64", "compiler_linux64", mode="before")
     @classmethod
     def convert_to_path(cls, v: str | Path | None) -> Path | None:
         """Convert string paths to Path objects."""
@@ -105,6 +109,8 @@ class SystemPaths(BaseModel):
     lib_win32_debug: Optional[Path] = Field(default=None)
     lib_win64_release: Optional[Path] = Field(default=None)
     lib_win64_debug: Optional[Path] = Field(default=None)
+    lib_linux64_release: Optional[Path] = Field(default=None)
+    lib_linux64_debug: Optional[Path] = Field(default=None)
 
     @field_validator(
         "rtl",
@@ -113,6 +119,8 @@ class SystemPaths(BaseModel):
         "lib_win32_debug",
         "lib_win64_release",
         "lib_win64_debug",
+        "lib_linux64_release",
+        "lib_linux64_debug",
         mode="before",
     )
     @classmethod
@@ -152,6 +160,31 @@ class CompilerConfig(BaseModel):
     )
 
 
+class LinuxSDKConfig(BaseModel):
+    """Linux SDK configuration for cross-compilation."""
+
+    sysroot: Optional[Path] = Field(
+        default=None, description="SDK sysroot path (--syslibroot)"
+    )
+    libpaths: list[Path] = Field(
+        default_factory=list, description="SDK library paths (--libpath)"
+    )
+
+    @field_validator("sysroot", mode="before")
+    @classmethod
+    def convert_sysroot(cls, v: str | Path | None) -> Path | None:
+        """Convert sysroot path to Path object."""
+        if v is None or isinstance(v, Path):
+            return v
+        return Path(v)
+
+    @field_validator("libpaths", mode="before")
+    @classmethod
+    def convert_libpaths(cls, v: list[str | Path]) -> list[Path]:
+        """Convert libpaths to Path objects."""
+        return [Path(p) if isinstance(p, str) else p for p in v]
+
+
 class Config(BaseModel):
     """Complete configuration model."""
 
@@ -159,6 +192,9 @@ class Config(BaseModel):
     paths: PathsConfig = Field(description="Library paths")
     compiler: CompilerConfig = Field(
         default_factory=CompilerConfig, description="Compiler settings"
+    )
+    linux_sdk: LinuxSDKConfig = Field(
+        default_factory=LinuxSDKConfig, description="Linux SDK settings for cross-compilation"
     )
 
 
@@ -219,14 +255,23 @@ class BuildLogInfo(BaseModel):
     compiler_flags: list[str] = Field(
         default_factory=list, description="Additional compiler flags"
     )
+    # Linux64 SDK fields
+    sdk_sysroot: Optional[Path] = Field(
+        default=None, description="Linux SDK sysroot path (--syslibroot)"
+    )
+    sdk_libpaths: list[Path] = Field(
+        default_factory=list, description="Linux SDK library paths (--libpath)"
+    )
 
-    @field_validator("compiler_path", mode="before")
+    @field_validator("compiler_path", "sdk_sysroot", mode="before")
     @classmethod
-    def convert_compiler_path(cls, v: str | Path) -> Path:
+    def convert_compiler_path(cls, v: str | Path | None) -> Path | None:
         """Convert compiler path to Path object."""
+        if v is None:
+            return None
         return Path(v) if isinstance(v, str) else v
 
-    @field_validator("search_paths", mode="before")
+    @field_validator("search_paths", "sdk_libpaths", mode="before")
     @classmethod
     def convert_search_paths(cls, v: list[str | Path]) -> list[Path]:
         """Convert search paths to Path objects."""

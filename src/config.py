@@ -11,7 +11,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from src.models import Config, CompilerConfig, DelphiConfig, PathsConfig, SystemPaths
+from src.models import Config, CompilerConfig, DelphiConfig, LinuxSDKConfig, PathsConfig, SystemPaths
 
 
 class ConfigLoader:
@@ -158,7 +158,19 @@ class ConfigLoader:
             flags=compiler_raw.get("flags", {"flags": []}),
         )
 
-        return Config(delphi=delphi_config, paths=paths_config, compiler=compiler_config)
+        # Parse Linux SDK configuration (optional)
+        linux_sdk_raw = raw_config.get("linux_sdk", {})
+        linux_sdk_config = LinuxSDKConfig(
+            sysroot=linux_sdk_raw.get("sysroot"),
+            libpaths=linux_sdk_raw.get("libpaths", []),
+        )
+
+        return Config(
+            delphi=delphi_config,
+            paths=paths_config,
+            compiler=compiler_config,
+            linux_sdk=linux_sdk_config,
+        )
 
     def _validate_config(self) -> None:
         """Validate the loaded configuration.
@@ -179,6 +191,7 @@ class ConfigLoader:
         # Check if compilers exist
         dcc32 = self.get_compiler_path("Win32")
         dcc64 = self.get_compiler_path("Win64")
+        dcclinux64 = self.get_compiler_path("Linux64")
 
         if not dcc32.exists():
             raise ValueError(
@@ -190,6 +203,12 @@ class ConfigLoader:
             print(
                 f"Warning: Delphi Win64 compiler not found at: {dcc64}\n"
                 "Win64 compilation will not be available."
+            )
+
+        if not dcclinux64.exists():
+            print(
+                f"Warning: Delphi Linux64 compiler not found at: {dcclinux64}\n"
+                "Linux64 cross-compilation will not be available."
             )
 
         # Warn about missing library paths (non-fatal)
@@ -208,7 +227,7 @@ class ConfigLoader:
         """Get the compiler executable path for a platform.
 
         Args:
-            platform: Target platform ("Win32" or "Win64")
+            platform: Target platform ("Win32", "Win64", or "Linux64")
 
         Returns:
             Path to compiler executable
@@ -226,11 +245,19 @@ class ConfigLoader:
                 return self.config.delphi.compiler_win64
             return self.config.delphi.root_path / "bin" / "dcc64.exe"
 
+        elif platform == "Linux64":
+            if self.config.delphi.compiler_linux64:
+                return self.config.delphi.compiler_linux64
+            return self.config.delphi.root_path / "bin" / "dcclinux64.exe"
+
         else:
             raise ValueError(f"Unknown platform: {platform}")
 
-    def get_all_search_paths(self) -> list[Path]:
-        """Get all configured search paths (system + libraries).
+    def get_all_search_paths(self, platform: str = "Win32") -> list[Path]:
+        """Get all configured search paths (system + libraries) for a platform.
+
+        Args:
+            platform: Target platform ("Win32", "Win64", or "Linux64")
 
         Returns:
             List of all search paths
@@ -244,16 +271,45 @@ class ConfigLoader:
         # NOTE: We do NOT add rtl/vcl source paths - the compiler knows where to find them
         system = self.config.paths.system
 
-        if system.lib_win32_release:
-            paths.append(system.lib_win32_release)
-        if system.lib_win32_debug:
-            paths.append(system.lib_win32_debug)
-        if system.lib_win64_release:
-            paths.append(system.lib_win64_release)
-        if system.lib_win64_debug:
-            paths.append(system.lib_win64_debug)
+        if platform == "Win32":
+            if system.lib_win32_release:
+                paths.append(system.lib_win32_release)
+            if system.lib_win32_debug:
+                paths.append(system.lib_win32_debug)
+        elif platform == "Win64":
+            if system.lib_win64_release:
+                paths.append(system.lib_win64_release)
+            if system.lib_win64_debug:
+                paths.append(system.lib_win64_debug)
+        elif platform == "Linux64":
+            if system.lib_linux64_release:
+                paths.append(system.lib_linux64_release)
+            if system.lib_linux64_debug:
+                paths.append(system.lib_linux64_debug)
 
         # Add library paths
         paths.extend(self.config.paths.libraries.values())
 
         return paths
+
+    def get_linux_sdk_sysroot(self) -> Path | None:
+        """Get the Linux SDK sysroot path for cross-compilation.
+
+        Returns:
+            Path to SDK sysroot or None if not configured
+        """
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+
+        return self.config.linux_sdk.sysroot
+
+    def get_linux_sdk_libpaths(self) -> list[Path]:
+        """Get the Linux SDK library paths for cross-compilation.
+
+        Returns:
+            List of SDK library paths
+        """
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+
+        return self.config.linux_sdk.libpaths

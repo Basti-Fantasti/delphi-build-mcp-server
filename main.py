@@ -13,6 +13,7 @@ from mcp.types import Tool, TextContent
 from src.compiler import DelphiCompiler
 from src.config import ConfigLoader
 from src.config_generator import ConfigGenerator
+from src.multi_config_generator import MultiConfigGenerator
 
 
 # Create MCP server instance
@@ -95,11 +96,42 @@ GENERATE_CONFIG_TOOL = Tool(
     },
 )
 
+GENERATE_MULTI_CONFIG_TOOL = Tool(
+    name="generate_config_from_multiple_build_logs",
+    description=(
+        "Generate delphi_config.toml file from multiple IDE build logs for different configurations "
+        "and platforms. Creates a hierarchical config with platform and config-specific settings. "
+        "Use this when you have build logs from multiple configurations (Debug/Release) and/or "
+        "platforms (Win32/Win64/Linux64)."
+    ),
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "build_log_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Array of absolute paths to IDE build log files (e.g., Debug-Win32, Release-Win64, Debug-Linux64)",
+            },
+            "output_config_path": {
+                "type": "string",
+                "description": "Output path for generated config file",
+                "default": "delphi_config.toml",
+            },
+            "use_env_vars": {
+                "type": "boolean",
+                "description": "Replace user paths with ${USERNAME} environment variable",
+                "default": True,
+            },
+        },
+        "required": ["build_log_paths"],
+    },
+)
+
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools."""
-    return [COMPILE_TOOL, GENERATE_CONFIG_TOOL]
+    return [COMPILE_TOOL, GENERATE_CONFIG_TOOL, GENERATE_MULTI_CONFIG_TOOL]
 
 
 @app.call_tool()
@@ -112,6 +144,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "generate_config_from_build_log":
             result = await handle_generate_config(arguments)
+            return [TextContent(type="text", text=result)]
+
+        elif name == "generate_config_from_multiple_build_logs":
+            result = await handle_generate_multi_config(arguments)
             return [TextContent(type="text", text=result)]
 
         else:
@@ -180,6 +216,34 @@ async def handle_generate_config(arguments: dict) -> str:
     # Generate config
     result = generator.generate_from_build_log(
         build_log_path=build_log_path, output_path=output_config_path
+    )
+
+    # Convert to JSON
+    return json.dumps(result.model_dump(), indent=2)
+
+
+async def handle_generate_multi_config(arguments: dict) -> str:
+    """Handle generate_config_from_multiple_build_logs tool invocation.
+
+    Args:
+        arguments: Tool arguments
+
+    Returns:
+        JSON string with generation result
+    """
+    import json
+
+    # Extract arguments
+    build_log_paths = arguments["build_log_paths"]
+    output_config_path = Path(arguments.get("output_config_path", "delphi_config.toml"))
+    use_env_vars = arguments.get("use_env_vars", True)
+
+    # Initialize generator
+    generator = MultiConfigGenerator(use_env_vars=use_env_vars)
+
+    # Generate config from multiple logs
+    result = generator.generate_from_build_logs(
+        build_log_paths=build_log_paths, output_path=output_config_path
     )
 
     # Convert to JSON

@@ -13,10 +13,13 @@ class BuildLogParser:
     COMPILER_PATTERNS = [
         r"dcc32\.exe\s+(.+)",  # Win32 compiler
         r"dcc64\.exe\s+(.+)",  # Win64 compiler
+        r"dcclinux64\.exe\s+(.+)",  # Linux64 cross-compiler
         r"dcc32\s+Befehlszeile",  # German: command line
         r"dcc32\s+command\s+line",  # English: command line
         r"dcc64\s+Befehlszeile",  # German: command line
         r"dcc64\s+command\s+line",  # English: command line
+        r"dcclinux64\s+Befehlszeile",  # German: command line
+        r"dcclinux64\s+command\s+line",  # English: command line
     ]
 
     def __init__(self, build_log_path: Path):
@@ -64,7 +67,7 @@ class BuildLogParser:
         # Find the line with compiler path
         compiler_line_idx = None
         for idx, line in enumerate(lines):
-            if re.search(r"dcc32\.exe|dcc64\.exe", line, re.IGNORECASE):
+            if re.search(r"dcc32\.exe|dcc64\.exe|dcclinux64\.exe", line, re.IGNORECASE):
                 compiler_line_idx = idx
                 break
 
@@ -101,13 +104,19 @@ class BuildLogParser:
         """
         # Detect compiler path and platform
         compiler_match = re.search(
-            r"([a-z]:\\[^\"]+\\dcc(?:32|64)\.exe)", command, re.IGNORECASE
+            r"([a-z]:\\[^\"]+\\dcc(?:32|64|linux64)\.exe)", command, re.IGNORECASE
         )
         if not compiler_match:
             raise ValueError("Could not extract compiler path from command")
 
         compiler_path = Path(compiler_match.group(1))
-        platform = Platform.WIN32 if "dcc32" in compiler_path.name.lower() else Platform.WIN64
+        compiler_name = compiler_path.name.lower()
+        if "dcclinux64" in compiler_name:
+            platform = Platform.LINUX64
+        elif "dcc32" in compiler_name:
+            platform = Platform.WIN32
+        else:
+            platform = Platform.WIN64
 
         # Detect Delphi version from path
         version_match = re.search(r"Studio\\([\d.]+)", str(compiler_path), re.IGNORECASE)
@@ -128,6 +137,17 @@ class BuildLogParser:
         # Extract other compiler flags
         compiler_flags = self._extract_compiler_flags(command)
 
+        # Extract Linux SDK options (only present for Linux64 builds)
+        sdk_sysroot = self._extract_sdk_sysroot(command) if platform == Platform.LINUX64 else None
+        sdk_libpaths = self._extract_sdk_libpaths(command) if platform == Platform.LINUX64 else []
+
+        # For Linux64 builds, also extract the Delphi RTL lib path from search paths
+        # The IDE puts it in -U but not in --libpath, but we need it for the linker
+        if platform == Platform.LINUX64:
+            delphi_lib_paths = self._extract_delphi_lib_paths(search_paths, platform)
+            # Prepend Delphi lib paths (they should come before SDK paths)
+            sdk_libpaths = delphi_lib_paths + sdk_libpaths
+
         return BuildLogInfo(
             compiler_path=compiler_path,
             delphi_version=delphi_version,
@@ -137,6 +157,8 @@ class BuildLogParser:
             namespace_prefixes=namespace_prefixes,
             unit_aliases=unit_aliases,
             compiler_flags=compiler_flags,
+            sdk_sysroot=sdk_sysroot,
+            sdk_libpaths=sdk_libpaths,
         )
 
     def _extract_search_paths(self, command: str) -> list[Path]:
@@ -309,3 +331,95 @@ class BuildLogParser:
                         flags.append(flag)
 
         return flags
+
+    def _extract_sdk_sysroot(self, command: str) -> Path | None:
+        """Extract Linux SDK sysroot path from --syslibroot flag.
+
+        Args:
+            command: The compiler command line
+
+        Returns:
+            Path to SDK sysroot or None if not found
+        """
+        # Match --syslibroot: followed by path until space or end
+        pattern = r"--syslibroot:([^\s]+)"
+        match = re.search(pattern, command, re.IGNORECASE)
+
+        if not match:
+            return None
+
+        sysroot_path = match.group(1).strip()
+        return Path(sysroot_path) if sysroot_path else None
+
+    def _extract_sdk_libpaths(self, command: str) -> list[Path]:
+        """Extract Linux SDK library paths from --libpath flag.
+
+        Args:
+            command: The compiler command line
+
+        Returns:
+            List of SDK library paths
+        """
+        # Match --libpath: followed by semicolon-separated paths
+        # The paths continue until we hit another flag (-NH, etc.)
+        pattern = r"--libpath:(.+?)(?=\s+-[A-Z]|\s+\w+\.dpr|$)"
+        match = re.search(pattern, command, re.IGNORECASE | re.DOTALL)
+
+        if not match:
+            return []
+
+        libpath_string = match.group(1)
+        # Clean up: remove newlines and extra whitespace
+        libpath_string = libpath_string.replace('\n', ' ').replace('\r', ' ')
+        libpath_string = ' '.join(libpath_string.split())
+
+        # Split by semicolons
+        paths = [p.strip() for p in libpath_string.split(";") if p.strip()]
+
+        # Convert to Path objects, filtering invalid paths
+        result = []
+        for p in paths:
+            if not p or len(p) < 3:
+                continue
+            # Must look like a path
+            if not any(char in p for char in [':', '\\', '/']):
+                continue
+            try:
+                result.append(Path(p))
+            except Exception:
+                continue
+
+        return result
+
+    def _extract_delphi_lib_paths(self, search_paths: list[Path], platform: Platform) -> list[Path]:
+        """Extract Delphi RTL library paths from search paths.
+
+        The IDE includes Delphi lib paths in -U (unit search) but not in --libpath.
+        For Linux64 cross-compilation, the linker needs these paths to find
+        RTL libraries like librtlhelper_PIC.a.
+
+        Args:
+            search_paths: List of search paths extracted from -U, -I, etc.
+            platform: Target platform
+
+        Returns:
+            List of Delphi lib paths that should be added to linker libpaths
+        """
+        result = []
+
+        # Pattern to match Delphi lib paths for the target platform
+        # e.g., "lib/Linux64/release" or "lib\Linux64\debug"
+        platform_name = platform.value  # "Linux64", "Win32", "Win64"
+        pattern = re.compile(
+            rf"[/\\]lib[/\\]{platform_name}[/\\](release|debug)$",
+            re.IGNORECASE
+        )
+
+        for path in search_paths:
+            path_str = str(path)
+            if pattern.search(path_str):
+                # This is a Delphi lib path for the target platform
+                if path not in result:
+                    result.append(path)
+
+        return result

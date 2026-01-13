@@ -113,6 +113,10 @@ class ConfigGenerator:
 
         # Compiler aliases section
         lines.extend(self._generate_aliases_section(log_info))
+        lines.append("")
+
+        # Linux SDK section (for cross-compilation)
+        lines.extend(self._generate_linux_sdk_section(log_info))
 
         return "\n".join(lines)
 
@@ -144,6 +148,7 @@ class ConfigGenerator:
         lines.append("# Compiler executables (auto-detected from root_path if not specified)")
         lines.append('# compiler_win32 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc32.exe"')
         lines.append('# compiler_win64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc64.exe"')
+        lines.append('# compiler_linux64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcclinux64.exe"')
 
         return lines
 
@@ -196,6 +201,8 @@ class ConfigGenerator:
             "lib_win32_debug": None,
             "lib_win64_release": None,
             "lib_win64_debug": None,
+            "lib_linux64_release": None,
+            "lib_linux64_debug": None,
         }
 
         for path in system_paths:
@@ -208,6 +215,10 @@ class ConfigGenerator:
                 lib_paths["lib_win64_release"] = path
             elif "\\lib\\win64\\debug" in path_str:
                 lib_paths["lib_win64_debug"] = path
+            elif "\\lib\\linux64\\release" in path_str:
+                lib_paths["lib_linux64_release"] = path
+            elif "\\lib\\linux64\\debug" in path_str:
+                lib_paths["lib_linux64_debug"] = path
 
         # Write lib paths
         lines.append("# Compiled library paths")
@@ -313,6 +324,51 @@ class ConfigGenerator:
             lines.append('"WinProcs" = "Winapi.Windows"')
             lines.append('"SysUtils" = "System.SysUtils"')
             lines.append('"Classes" = "System.Classes"')
+
+        return lines
+
+    def _generate_linux_sdk_section(self, log_info: BuildLogInfo) -> list[str]:
+        """Generate [linux_sdk] section for cross-compilation.
+
+        Args:
+            log_info: Build log information
+
+        Returns:
+            List of TOML lines
+        """
+        lines = [
+            "# " + "=" * 77,
+            "# Linux SDK Configuration (for cross-compilation)",
+            "# " + "=" * 77,
+            "[linux_sdk]",
+            "# Linux SDK sysroot and library paths for cross-compilation to Linux64",
+            "# These are extracted from IDE build logs when compiling for Linux64 target",
+        ]
+
+        # Check if we have SDK info from the build log
+        if log_info.sdk_sysroot:
+            sysroot_str = self._format_path(log_info.sdk_sysroot)
+            lines.append(f'sysroot = "{sysroot_str}"')
+        else:
+            # Example/placeholder
+            lines.append('# sysroot = "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk"')
+
+        lines.append("")
+
+        if log_info.sdk_libpaths:
+            lines.append("libpaths = [")
+            for path in log_info.sdk_libpaths:
+                path_str = self._format_path(path)
+                lines.append(f'    "{path_str}",')
+            lines.append("]")
+        else:
+            # Example/placeholder
+            lines.append("# libpaths = [")
+            lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/usr/lib/gcc/x86_64-linux-gnu/11",')
+            lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/usr/lib/x86_64-linux-gnu",')
+            lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/lib/x86_64-linux-gnu",')
+            lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/lib64",')
+            lines.append("# ]")
 
         return lines
 

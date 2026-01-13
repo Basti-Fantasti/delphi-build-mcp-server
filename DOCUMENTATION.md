@@ -25,9 +25,10 @@ The Delphi Build MCP Server is a Model Context Protocol (MCP) server that enable
 ### Key Features
 
 - **Automatic Configuration**: Generate config from IDE build logs with multi-line parsing
+- **Multi-Config Support**: Generate unified config from multiple build logs (Debug/Release × Win32/Win64/Linux64)
 - **Smart Compilation**: Reads .dproj files for build settings
 - **Filtered Output**: Returns only errors, filters warnings and hints
-- **Multiple Platforms**: Supports Win32 and Win64
+- **Cross-Platform**: Supports Win32, Win64, and Linux64 cross-compilation
 - **Multiple Configurations**: Handles Debug, Release, and custom configs
 - **Environment Variables**: Auto-expands ${USERNAME} and other variables
 - **Error Parsing**: Extracts file, line, column, and message from errors
@@ -44,25 +45,28 @@ The Delphi Build MCP Server is a Model Context Protocol (MCP) server that enable
 └────────┬────────┘
          │ MCP Protocol
          ▼
-┌─────────────────────────────────────┐
-│   Delphi Build MCP Server           │
-├─────────────────────────────────────┤
-│ Tools:                              │
-│ • compile_delphi_project            │
-│ • generate_config_from_build_log    │
-├─────────────────────────────────────┤
-│ Components:                         │
-│ • .dproj Parser                     │
-│ • Build Log Parser                  │
-│ • Compiler Output Parser            │
-│ • Config Manager                    │
-└────────┬────────────────────────────┘
+┌───────────────────────────────────────────┐
+│   Delphi Build MCP Server                 │
+├───────────────────────────────────────────┤
+│ Tools:                                    │
+│ • compile_delphi_project                  │
+│ • generate_config_from_build_log          │
+│ • generate_config_from_multiple_build_logs│
+├───────────────────────────────────────────┤
+│ Components:                               │
+│ • .dproj Parser                           │
+│ • Build Log Parser                        │
+│ • Multi-Config Generator                  │
+│ • Compiler Output Parser                  │
+│ • Config Manager                          │
+└────────┬──────────────────────────────────┘
          │ Command Line
          ▼
-┌─────────────────┐
-│ dcc32.exe       │
-│ dcc64.exe       │
-└─────────────────┘
+┌──────────────────┐
+│ dcc32.exe        │ Win32
+│ dcc64.exe        │ Win64
+│ dcclinux64.exe   │ Linux64 (cross-compile)
+└──────────────────┘
 ```
 
 ---
@@ -93,9 +97,23 @@ pip install uv
 Then clone and install the MCP server:
 
 ```bash
-git clone https://github.com/Basti-Fantasti/delphi-build-mcp-server.git
+git clone https://github.com/your-org/delphi-build-mcp-server.git
 cd delphi-build-mcp-server
-uv sync
+uv venv
+uv pip install -e .
+```
+
+### Install via pip (Alternative)
+
+```bash
+git clone https://github.com/your-org/delphi-build-mcp-server.git
+cd delphi-build-mcp-server
+python -m venv .venv
+# On Windows
+.venv\Scripts\activate
+# On macOS/Linux
+source .venv/bin/activate
+pip install -e .
 ```
 
 ### Verify Installation
@@ -117,6 +135,8 @@ The server looks for `delphi_config.toml` in:
 3. MCP server directory
 
 ### Configuration File Structure
+
+**Basic Structure (single platform):**
 
 ```toml
 # delphi_config.toml
@@ -145,9 +165,65 @@ prefixes = ["Winapi", "System.Win", "Data.Win", "System", "Vcl"]
 # ... more aliases
 ```
 
+**Hierarchical Structure (multi-platform, generated from multiple build logs):**
+
+```toml
+# delphi_config.toml - Multi-platform configuration
+
+[delphi]
+version = "23.0"
+root_path = "C:/Program Files (x86)/Embarcadero/Studio/23.0"
+
+# =========================================================================
+# Common Library Paths (used by ALL configurations)
+# =========================================================================
+[paths.libraries]
+spring4d = "X:/Delphi_libs/spring4d"
+dunitx = "C:/Program Files (x86)/Embarcadero/Studio/23.0/source/DunitX"
+
+# =========================================================================
+# Platform and Configuration Specific Paths
+# =========================================================================
+[paths.Win32.Debug]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/debug"
+
+[paths.Win32.Release]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/release"
+
+[paths.Linux64.Debug]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/linux64/debug"
+
+[paths.Linux64.Release]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/linux64/release"
+
+# =========================================================================
+# Compiler Flags
+# =========================================================================
+[compiler.flags]
+common = ["--no-config", "-Q", "-B"]
+
+# Linux64-specific flags (linker paths for cross-compilation)
+[compiler.flags.Linux64.Debug]
+flags = ["--libpath:...", "--syslibroot:..."]
+
+[compiler.flags.Linux64.Release]
+flags = ["--libpath:...", "--syslibroot:..."]
+
+[compiler.namespaces]
+prefixes = ["Winapi", "System.Win", "Data.Win", "System", "Vcl"]
+
+[compiler.aliases]
+"WinTypes" = "Winapi.Windows"
+"SysUtils" = "System.SysUtils"
+```
+
 ### Generating Configuration Automatically
 
-See [Quick Start Guide](QUICKSTART.md#step-2-generate-configuration-from-ide-build-log) for instructions on generating config from a build log.
+**Single build log:**
+See [Quick Start Guide](QUICKSTART.md#step-2-generate-configuration-from-ide-build-log) for instructions.
+
+**Multiple build logs (recommended for multi-platform projects):**
+Use `generate_config_from_multiple_build_logs` tool or the `MultiConfigGenerator` Python class.
 
 ### Environment Variables
 
@@ -181,7 +257,7 @@ Compile a Delphi project and return parsed results.
 | `project_path` | string | **Yes** | - | Absolute path to .dpr or .dproj file |
 | `force_build_all` | boolean | No | false | Force rebuild all units (-B flag) |
 | `override_config` | string | No | null | Override active build config ("Debug", "Release") |
-| `override_platform` | string | No | null | Override active platform ("Win32", "Win64") |
+| `override_platform` | string | No | null | Override active platform ("Win32", "Win64", "Linux64") |
 | `additional_search_paths` | array | No | [] | Extra unit search paths |
 | `additional_flags` | array | No | [] | Additional compiler flags |
 
@@ -201,7 +277,7 @@ Compile a Delphi project and return parsed results.
     }
   ],
   "compilation_time_seconds": 2.5,
-  "output_executable": "C:\\MyProject\\Win32\\Debug\\MyApp.exe",
+  "output_executable": "X:\\MyProject\\Win32\\Debug\\MyApp.exe",
   "statistics": {
     "lines_compiled": 15234,
     "warnings_filtered": 3,
@@ -287,7 +363,103 @@ msbuild MyProject.dproj /v:detailed > build.log 2>&1
 
 **From Claude Code:**
 ```
-I have a build log at C:\MyProject\build.log. Please generate a Delphi configuration from it.
+I have a build log at X:\MyProject\build.log. Please generate a Delphi configuration from it.
+```
+
+---
+
+### Tool 3: `generate_config_from_multiple_build_logs`
+
+Generate a unified `delphi_config.toml` from multiple IDE build logs for different configurations (Debug/Release) and platforms (Win32/Win64/Linux64). This creates a hierarchical config with platform and config-specific settings.
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `build_log_paths` | array | **Yes** | - | List of paths to IDE build log files |
+| `output_config_path` | string | No | "delphi_config.toml" | Output file path |
+| `use_env_vars` | boolean | No | true | Replace paths with ${USERNAME} |
+
+#### Return Value
+
+```json
+{
+  "success": true,
+  "config_file_path": "X:\\delphi-build-mcp-server\\delphi_config.toml",
+  "build_logs_processed": [
+    {
+      "path": "build_debug_win32.log",
+      "config": "Debug",
+      "platform": "Win32",
+      "auto_detected": true
+    },
+    {
+      "path": "build_release_linux64.log",
+      "config": "Release",
+      "platform": "Linux64",
+      "auto_detected": true
+    }
+  ],
+  "statistics": {
+    "build_logs_parsed": 2,
+    "configs_found": ["Debug", "Release"],
+    "platforms_found": ["Win32", "Linux64"],
+    "total_library_paths": 85
+  },
+  "message": "Configuration file generated successfully from 2 build log(s)"
+}
+```
+
+#### Generated Config Structure
+
+The multi-config generator creates a hierarchical TOML structure:
+
+```toml
+# Common paths used by ALL configurations
+[paths.libraries]
+spring4d = "X:/Delphi_libs/spring4d"
+
+# Platform/config-specific paths
+[paths.Win32.Debug]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/debug"
+
+[paths.Linux64.Debug]
+lib = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/linux64/debug"
+
+# Platform/config-specific compiler flags
+[compiler.flags]
+common = ["--no-config", "-Q", "-B"]
+
+[compiler.flags.Linux64.Debug]
+flags = ["--libpath:/path/to/sdk/lib;/path/to/delphi/lib", "--syslibroot:/path/to/sdk"]
+```
+
+#### Example Usage
+
+**From Claude Code:**
+```
+Please generate a Delphi configuration from these build logs:
+- X:\logs\build_debug_win32.log
+- X:\logs\build_release_win32.log
+- X:\logs\build_debug_linux64.log
+- X:\logs\build_release_linux64.log
+```
+
+**Direct MCP call:**
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "generate_config_from_multiple_build_logs",
+    "arguments": {
+      "build_log_paths": [
+        "X:\\logs\\build_debug_win32.log",
+        "X:\\logs\\build_release_linux64.log"
+      ],
+      "output_config_path": "delphi_config.toml"
+    }
+  }
+}
 ```
 
 ---
@@ -320,6 +492,7 @@ I have a build log at C:\MyProject\build.log. Please generate a Delphi configura
 5. Select compiler
    • Win32 → dcc32.exe
    • Win64 → dcc64.exe
+   • Linux64 → dcclinux64.exe (cross-compiler)
    ↓
 6. Build command line
    • Compiler flags from .dproj
@@ -479,6 +652,44 @@ Add additional compiler flags:
     "-V"       // Verbose
   ]
 }
+```
+
+### Linux64 Cross-Compilation
+
+The server fully supports cross-compiling Delphi projects for Linux64 from Windows.
+
+**Setup:**
+1. Create build logs for both Win32 and Linux64 configurations in the IDE
+2. Generate a unified config using `generate_config_from_multiple_build_logs`
+3. The config will include Linux64-specific flags like `--libpath` and `--syslibroot`
+
+**Platform-Specific Compiler Flags:**
+
+Linux64 compilation requires special linker flags that are automatically extracted from build logs:
+
+| Flag | Description |
+|------|-------------|
+| `--libpath` | Semicolon-separated paths to SDK libraries (e.g., Ubuntu 22.04 SDK) |
+| `--syslibroot` | Root path to the cross-compilation SDK |
+
+**Example: Compile for Linux64:**
+
+```json
+{
+  "project_path": "MyApp.dproj",
+  "override_platform": "Linux64",
+  "override_config": "Release"
+}
+```
+
+**Generated Config Structure for Linux64:**
+
+```toml
+[compiler.flags.Linux64.Debug]
+flags = [
+  "--libpath:C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/usr/lib/x86_64-linux-gnu;C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/linux64/debug",
+  "--syslibroot:C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk"
+]
 ```
 
 ### Response File Support (Automatic)
@@ -676,6 +887,7 @@ version = "string"              # Required: Delphi version ("22.0", "23.0")
 root_path = "string"            # Required: Delphi installation root
 compiler_win32 = "string"       # Optional: Override dcc32.exe path
 compiler_win64 = "string"       # Optional: Override dcc64.exe path
+compiler_linux64 = "string"     # Optional: Override dcclinux64.exe path
 ```
 
 #### `[paths.system]` Section
@@ -699,6 +911,38 @@ lib_win64_debug = "string"      # Optional: Win64 debug libs
 # All optional - add as many as needed
 library_name = "string"
 another_lib = "string"
+```
+
+#### `[paths.<Platform>.<Config>]` Sections (Multi-Config)
+
+When using the multi-config generator, platform/config-specific paths are organized hierarchically:
+
+```toml
+[paths.Win32.Debug]
+lib = "string"                  # Delphi system lib path for Win32 Debug
+
+[paths.Win32.Release]
+lib = "string"                  # Delphi system lib path for Win32 Release
+
+[paths.Linux64.Debug]
+lib = "string"                  # Delphi system lib path for Linux64 Debug
+
+[paths.Linux64.Release]
+lib = "string"                  # Delphi system lib path for Linux64 Release
+```
+
+#### `[compiler.flags]` Section
+
+```toml
+[compiler.flags]
+common = ["string"]             # Flags applied to all configurations
+
+# Platform/config-specific flags (for multi-config)
+[compiler.flags.Linux64.Debug]
+flags = ["--libpath:...", "--syslibroot:..."]
+
+[compiler.flags.Linux64.Release]
+flags = ["--libpath:...", "--syslibroot:..."]
 ```
 
 #### `[compiler.namespaces]` Section
@@ -841,7 +1085,90 @@ Generate config from X:\build.log
 
 ---
 
-### Example 4: AI-Assisted Development Workflow
+### Example 4: Multi-Platform Config Generation
+
+**Request:**
+```
+Generate a unified config from multiple build logs for Win32 and Linux64
+```
+
+**MCP Call:**
+```json
+{
+  "name": "generate_config_from_multiple_build_logs",
+  "arguments": {
+    "build_log_paths": [
+      "X:\\logs\\build_debug_win32.log",
+      "X:\\logs\\build_release_win32.log",
+      "X:\\logs\\build_debug_linux64.log",
+      "X:\\logs\\build_release_linux64.log"
+    ],
+    "output_config_path": "delphi_config.toml"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "config_file_path": "X:\\delphi-build-mcp-server\\delphi_config.toml",
+  "build_logs_processed": [
+    {"path": "build_debug_win32.log", "config": "Debug", "platform": "Win32", "auto_detected": true},
+    {"path": "build_release_win32.log", "config": "Release", "platform": "Win32", "auto_detected": true},
+    {"path": "build_debug_linux64.log", "config": "Debug", "platform": "Linux64", "auto_detected": true},
+    {"path": "build_release_linux64.log", "config": "Release", "platform": "Linux64", "auto_detected": true}
+  ],
+  "statistics": {
+    "build_logs_parsed": 4,
+    "configs_found": ["Debug", "Release"],
+    "platforms_found": ["Win32", "Linux64"],
+    "total_library_paths": 95
+  },
+  "message": "Configuration file generated successfully from 4 build log(s)"
+}
+```
+
+---
+
+### Example 5: Linux64 Cross-Compilation
+
+**Request:**
+```
+Compile my project for Linux64
+```
+
+**MCP Call:**
+```json
+{
+  "name": "compile_delphi_project",
+  "arguments": {
+    "project_path": "X:\\MyProject\\MyApp.dproj",
+    "override_platform": "Linux64",
+    "override_config": "Release"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "exit_code": 0,
+  "errors": [],
+  "compilation_time_seconds": 2.72,
+  "output_executable": "X:\\MyProject\\Linux64\\Release\\MyApp",
+  "statistics": {
+    "lines_compiled": 15234,
+    "warnings_filtered": 0,
+    "hints_filtered": 5
+  }
+}
+```
+
+---
+
+### Example 6: AI-Assisted Development Workflow
 
 **Full conversation flow:**
 
@@ -995,7 +1322,15 @@ Never include credentials or API keys in Delphi source files that may be read by
 
 ## Changelog
 
-### Version 1.0.0 (Planned)
+### Version 1.1.0 (Current)
+- **Multi-Config Support**: New `generate_config_from_multiple_build_logs` tool
+- **Linux64 Cross-Compilation**: Full support for cross-compiling to Linux64
+- **Hierarchical TOML Structure**: Platform/config-specific paths and compiler flags
+- **Platform-Specific Compiler Flags**: Automatic `--libpath` and `--syslibroot` extraction for Linux64
+- **Multi-Config Generator**: New `MultiConfigGenerator` Python class
+- **Auto-Detection**: Config and platform auto-detected from build log headers
+
+### Version 1.0.0
 - Initial release
 - `compile_delphi_project` tool
 - `generate_config_from_build_log` tool
@@ -1003,9 +1338,9 @@ Never include credentials or API keys in Delphi source files that may be read by
 - Build log parsing
 - Output filtering (warnings/hints)
 
-### Version 1.1.0 (Future)
+### Version 1.2.0 (Future)
 - Package (.dpk) compilation support
-- Multiple configuration support
+- Android/Android64 platform support
 - Build cache optimization
 
 ---
