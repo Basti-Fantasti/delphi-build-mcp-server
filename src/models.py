@@ -22,6 +22,32 @@ class BuildConfig(str, Enum):
     RELEASE = "Release"
 
 
+# Supported configurations and platforms as constants
+SUPPORTED_CONFIGS = ["Debug", "Release"]
+SUPPORTED_PLATFORMS = ["Win32", "Win64", "Linux64", "Android", "Android64"]
+
+
+class BuildLogEntry(BaseModel):
+    """Entry representing a parsed build log file."""
+
+    path: str = Field(description="Path to the build log file")
+    config: str = Field(description="Build configuration (Debug/Release)")
+    platform: str = Field(description="Target platform (Win32/Win64/etc)")
+    auto_detected: bool = Field(description="Whether config/platform was auto-detected from header")
+
+
+class MultiConfigGenerationResult(BaseModel):
+    """Result of multi-config generation operation."""
+
+    success: bool = Field(description="Whether generation succeeded")
+    config_file_path: str = Field(description="Path to generated config file")
+    build_logs_processed: list[BuildLogEntry] = Field(
+        default_factory=list, description="List of processed build log entries"
+    )
+    statistics: dict = Field(default_factory=dict, description="Generation statistics")
+    message: str = Field(description="Human-readable message about the result")
+
+
 class CompilationError(BaseModel):
     """A single compilation error."""
 
