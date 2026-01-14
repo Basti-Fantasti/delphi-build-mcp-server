@@ -61,18 +61,13 @@ class MultiConfigGenerator:
 
             parser = BuildLogParser(log_path)
 
-            # Try to auto-detect config/platform from header
-            config, platform = parser.extract_config_platform_from_header()
-            auto_detected = config is not None and platform is not None
-
             # Parse the log content
             log_info = parser.parse()
 
-            # Use auto-detected values if available, otherwise fall back to parsed values
-            if not config:
-                config = log_info.build_config
-            if not platform:
-                platform = log_info.platform.value
+            # Get config and platform from parsed log
+            config = log_info.build_config
+            platform = log_info.platform.value
+            auto_detected = True  # Values are detected from compiler command
 
             # Normalize config and platform names
             config = self._normalize_config(config)
@@ -195,15 +190,13 @@ class MultiConfigGenerator:
         lines.extend(self._generate_delphi_section(first_log))
         lines.append("")
 
-        # Categorize paths across all logs
-        common_paths, platform_config_paths = self._categorize_paths_across_logs(parsed_logs)
-
-        # Common library paths section (paths that appear in ALL logs)
-        lines.extend(self._generate_common_libraries_section(common_paths, first_log))
+        # System paths section (required by config loader)
+        lines.extend(self._generate_system_paths_section(first_log, parsed_logs))
         lines.append("")
 
-        # Platform/config specific paths sections
-        lines.extend(self._generate_platform_config_sections(platform_config_paths, parsed_logs))
+        # Library paths section - include ALL library paths with unique names
+        lines.extend(self._generate_all_libraries_section(parsed_logs, first_log))
+        lines.append("")
 
         # Compiler flags section (common flags)
         lines.extend(self._generate_compiler_flags_section(parsed_logs))
@@ -297,27 +290,108 @@ class MultiConfigGenerator:
 
         return lines
 
-    def _generate_common_libraries_section(
-        self, common_paths: list[Path], log_info: BuildLogInfo
+    def _generate_system_paths_section(
+        self, log_info: BuildLogInfo, parsed_logs: dict[tuple[str, str], BuildLogInfo]
     ) -> list[str]:
-        """Generate [paths.libraries] section for common (shared) paths."""
-        # Separate system paths from library paths
-        system_paths, library_paths = self._categorize_paths(common_paths, log_info)
-
+        """Generate [paths.system] section with RTL/VCL and lib paths."""
         lines = [
             "# " + "=" * 77,
-            "# Common Library Paths (used by ALL configurations)",
+            "# System Paths (Delphi RTL/VCL)",
+            "# " + "=" * 77,
+            "[paths.system]",
+        ]
+
+        # Derive paths from compiler root
+        compiler_root = log_info.compiler_path.parent.parent
+        rtl_path = compiler_root / "source" / "rtl"
+        vcl_path = compiler_root / "source" / "vcl"
+
+        lines.append(f'rtl = "{self._format_path(rtl_path)}"')
+        lines.append(f'vcl = "{self._format_path(vcl_path)}"')
+        lines.append("")
+
+        # Get platforms from parsed logs
+        platforms = set(k[1] for k in parsed_logs.keys())
+
+        # For each platform found, always include BOTH debug and release lib paths
+        # (resource files like Controls.res are only in release folder)
+        for platform in sorted(platforms):
+            for config in ["debug", "release"]:
+                field_name = f"lib_{platform.lower()}_{config}"
+                lib_path = compiler_root / "lib" / platform / config
+                lines.append(f'{field_name} = "{self._format_path(lib_path)}"')
+
+        # Add placeholder comments for platforms not in build logs
+        all_platforms = ["Win32", "Win64", "Linux64"]
+        for platform in all_platforms:
+            if platform not in platforms:
+                for config in ["debug", "release"]:
+                    field_name = f"lib_{platform.lower()}_{config}"
+                    default_path = compiler_root / "lib" / platform / config
+                    lines.append(f'# {field_name} = "{self._format_path(default_path)}"')
+
+        return lines
+
+    def _find_system_lib_in_search_paths(
+        self, log_info: BuildLogInfo, platform: str, config: str
+    ) -> Optional[Path]:
+        """Find the Delphi system lib path in search paths."""
+        platform_lower = platform.lower()
+        config_lower = config.lower()
+        compiler_root = str(log_info.compiler_path.parent.parent).lower()
+
+        for path in log_info.search_paths:
+            path_str = str(path).lower().replace("\\", "/")
+            # Check if it's a Delphi system lib path
+            if compiler_root.replace("\\", "/") in path_str:
+                if f"/lib/{platform_lower}/{config_lower}" in path_str:
+                    return path
+
+        # Fallback: construct from compiler root
+        return log_info.compiler_path.parent.parent / "lib" / platform / config.lower()
+
+    def _generate_all_libraries_section(
+        self, parsed_logs: dict[tuple[str, str], BuildLogInfo], first_log: BuildLogInfo
+    ) -> list[str]:
+        """Generate [paths.libraries] section with ALL library paths.
+
+        Collects all library paths from all build logs and assigns unique names.
+        Platform-specific paths get platform suffix to avoid conflicts.
+        """
+        lines = [
+            "# " + "=" * 77,
+            "# Library Paths",
             "# " + "=" * 77,
             "[paths.libraries]",
-            "# Third-party libraries that are shared across all configs/platforms",
+            "# Third-party libraries extracted from IDE build logs",
             "",
         ]
 
-        # Generate unique names for libraries
+        # Collect all unique library paths with their source info
+        all_library_paths: list[tuple[Path, str, str]] = []  # (path, config, platform)
+        seen_paths: set[str] = set()
+
+        for (config, platform), log_info in parsed_logs.items():
+            system_paths, library_paths = self._categorize_paths(log_info.search_paths, log_info)
+            for path in library_paths:
+                normalized = str(path).lower().replace("\\", "/")
+                if normalized not in seen_paths:
+                    seen_paths.add(normalized)
+                    all_library_paths.append((path, config, platform))
+
+        # Generate unique names for all libraries
         used_names: dict[str, int] = {}
 
-        for idx, path in enumerate(library_paths, 1):
+        for idx, (path, config, platform) in enumerate(all_library_paths, 1):
             base_name = self._derive_library_name(path, idx)
+
+            # Check if this path is platform-specific (contains platform name in path)
+            path_lower = str(path).lower()
+            is_platform_specific = any(p in path_lower for p in ["/win32", "/win64", "/linux64", "\\win32", "\\win64", "\\linux64"])
+
+            if is_platform_specific:
+                # Add platform suffix for platform-specific paths
+                base_name = f"{base_name}_{platform.lower()}"
 
             if base_name in used_names:
                 used_names[base_name] += 1
@@ -329,8 +403,8 @@ class MultiConfigGenerator:
             path_str = self._format_path(path)
             lines.append(f'{lib_name} = "{path_str}"')
 
-        if not library_paths:
-            lines.append("# No common library paths found across all build logs")
+        if not all_library_paths:
+            lines.append("# No library paths found in build logs")
 
         return lines
 
@@ -596,3 +670,95 @@ class MultiConfigGenerator:
         path_str = path_str.replace("\\", "/")
 
         return path_str
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Generate delphi_config.toml from multiple IDE build logs",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python -m src.multi_config_generator debug.log release.log
+  python -m src.multi_config_generator win32_debug.log win64_release.log -o my_config.toml
+  python -m src.multi_config_generator *.log --no-env-vars
+
+This tool merges multiple build logs (e.g., Debug/Release, Win32/Win64) into a
+single hierarchical configuration file with platform and config-specific sections.
+        """,
+    )
+
+    parser.add_argument(
+        "build_logs",
+        type=str,
+        nargs="+",
+        help="Paths to IDE build log files (at least one required)",
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="delphi_config.toml",
+        help="Output configuration file path (default: delphi_config.toml)",
+    )
+
+    parser.add_argument(
+        "--no-env-vars",
+        action="store_true",
+        help="Don't replace paths with environment variables like ${USERNAME}",
+    )
+
+    args = parser.parse_args()
+
+    # Convert output path
+    output_path = Path(args.output)
+
+    # Validate build log files exist
+    missing_files = []
+    for log_path in args.build_logs:
+        if not Path(log_path).exists():
+            missing_files.append(log_path)
+
+    if missing_files:
+        print("Error: Build log file(s) not found:", file=sys.stderr)
+        for f in missing_files:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    # Generate config
+    try:
+        print(f"Processing {len(args.build_logs)} build log(s):")
+        for log_path in args.build_logs:
+            print(f"  - {log_path}")
+
+        generator = MultiConfigGenerator(use_env_vars=not args.no_env_vars)
+        result = generator.generate_from_build_logs(args.build_logs, output_path)
+
+        # Print results
+        print(f"\n[SUCCESS] {result.message}")
+        print(f"\nGenerated: {result.config_file_path}")
+        print(f"\nBuild Logs Processed:")
+        for entry in result.build_logs_processed:
+            auto_str = " (auto-detected)" if entry.auto_detected else ""
+            print(f"  - {entry.path}: {entry.platform} {entry.config}{auto_str}")
+        print(f"\nStatistics:")
+        print(f"  Build logs parsed: {result.statistics['build_logs_parsed']}")
+        print(f"  Configurations: {', '.join(result.statistics['configs_found'])}")
+        print(f"  Platforms: {', '.join(result.statistics['platforms_found'])}")
+        print(f"  Total library paths: {result.statistics['total_library_paths']}")
+
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error parsing build logs: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)

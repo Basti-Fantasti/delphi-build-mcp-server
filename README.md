@@ -50,7 +50,17 @@ uv run python -m src.config_generator build.log
 For projects targeting multiple platforms (Win32/Win64/Linux64), create build logs for each configuration:
 1. Build in IDE with each Platform/Config combination
 2. Save each build log separately (e.g., `build_debug_win32.log`, `build_release_linux64.log`)
-3. Generate unified config from all logs
+3. Generate unified config from all logs:
+
+```bash
+uv run python -m src.multi_config_generator build_win32.log build_win64.log
+
+# Custom output path
+uv run python -m src.multi_config_generator build_win32.log build_win64.log -o my_config.toml
+
+# Disable environment variable substitution
+uv run python -m src.multi_config_generator *.log --no-env-vars
+```
 
 Or use the Python API:
 

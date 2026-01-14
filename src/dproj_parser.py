@@ -138,6 +138,10 @@ class DProjParser:
         Returns:
             DProjSettings with extracted configuration
         """
+        # Store config/platform for variable substitution
+        self._current_config = config
+        self._current_platform = platform
+
         # Extract MainSource element (the actual source file to compile)
         main_source = self._get_main_source()
 
@@ -327,17 +331,31 @@ class DProjParser:
         if not path_str:
             return None
 
-        # Remove MSBuild variables for now (we can enhance this later)
-        # Common variables: $(DCC_UnitSearchPath), $(Platform), $(Config), etc.
         path_str = path_str.strip()
 
         # Skip if it's just a variable reference
         if path_str.startswith("$(") and path_str.endswith(")"):
             return None
 
-        # Remove variable references from the path
+        # Substitute known MSBuild variables with their values
         import re
 
+        # Get current config/platform (set during _extract_settings)
+        config = getattr(self, "_current_config", "Debug")
+        platform = getattr(self, "_current_platform", "Win32")
+
+        # Define variable substitutions
+        substitutions = {
+            "$(Platform)": platform,
+            "$(Config)": config,
+            "$(Configuration)": config,
+        }
+
+        # Apply substitutions
+        for var, value in substitutions.items():
+            path_str = path_str.replace(var, value)
+
+        # Remove any remaining unknown variable references
         path_str = re.sub(r"\$\([^)]+\)", "", path_str)
         path_str = path_str.strip()
 

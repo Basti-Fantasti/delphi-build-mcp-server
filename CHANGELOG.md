@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-14
+
+### Added
+
+- **Multi-Config Generator CLI**: Command-line interface for generating config from multiple build logs
+  - Run with: `uv run python -m src.multi_config_generator build_win32.log build_win64.log`
+  - Supports `-o/--output` for custom output path
+  - Supports `--no-env-vars` to disable environment variable substitution
+
+### Fixed
+
+- **Multi-Config Generator**: Fixed several issues preventing successful compilation
+  - Fixed missing `extract_config_platform_from_header` method call
+  - Added required `[paths.system]` section with RTL/VCL and lib paths
+  - Fixed library path naming to use unique platform-suffixed names (e.g., `jvcl_lib_win32`, `jvcl_lib_win64`)
+  - Now includes both debug and release lib paths (resource files like `Controls.res` are only in release folder)
+
+- **MSBuild Variable Substitution**: Fixed `.dproj` parser to properly substitute variables
+  - `$(Platform)` and `$(Config)` are now replaced with actual values
+  - Previously these were removed, causing output paths like `bin\_\` instead of `bin\Win32_Debug\`
+
 ## [1.2.0] - 2026-01-14
 
 ### Fixed
