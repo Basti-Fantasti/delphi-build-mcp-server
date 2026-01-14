@@ -110,6 +110,24 @@ class DProjParser:
         # Default to Win32 if not found
         return "Win32"
 
+    def _get_main_source(self) -> Optional[str]:
+        """Get the main source file from the project.
+
+        This reads the <MainSource> element which specifies the actual source
+        file to compile (e.g., 'MyApp.dpr' for applications or 'MyPackage.dpk'
+        for packages).
+
+        Returns:
+            Main source filename (e.g., "MyApp.dpr" or "MyPackage.dpk"), or None if not found
+        """
+        # Look for MainSource element in any PropertyGroup
+        for prop_group in self.root.findall(".//ms:PropertyGroup", self.MSBUILD_NS):
+            main_source_elem = prop_group.find("ms:MainSource", self.MSBUILD_NS)
+            if main_source_elem is not None and main_source_elem.text:
+                return main_source_elem.text.strip()
+
+        return None
+
     def _extract_settings(self, config: str, platform: str) -> DProjSettings:
         """Extract all settings for the specified configuration and platform.
 
@@ -120,7 +138,10 @@ class DProjParser:
         Returns:
             DProjSettings with extracted configuration
         """
-        settings = DProjSettings(active_config=config, active_platform=platform)
+        # Extract MainSource element (the actual source file to compile)
+        main_source = self._get_main_source()
+
+        settings = DProjSettings(active_config=config, active_platform=platform, main_source=main_source)
 
         # Build a map from config/platform names to their internal Cfg keys
         config_key_map = self._build_config_key_map()

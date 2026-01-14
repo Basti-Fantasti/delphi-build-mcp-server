@@ -54,8 +54,8 @@ class DelphiCompiler:
         if not project_path.exists():
             raise FileNotFoundError(f"Project file not found: {project_path}")
 
-        if project_path.suffix.lower() not in [".dpr", ".dproj"]:
-            raise ValueError(f"Invalid project file: {project_path}")
+        if project_path.suffix.lower() not in [".dpr", ".dpk", ".dproj"]:
+            raise ValueError(f"Invalid project file: {project_path}. Expected .dpr, .dpk, or .dproj")
 
         # Load configuration
         if not self.config:
@@ -73,16 +73,16 @@ class DelphiCompiler:
             # No .dproj, use override or default to Win32
             platform = override_platform or "Win32"
 
-        # Get the actual .dpr file to compile (not .dproj)
-        dpr_path = self._get_dpr_path(project_path)
-        if not dpr_path.exists():
-            raise FileNotFoundError(f"Delphi project source file not found: {dpr_path}")
+        # Get the actual source file to compile (.dpr or .dpk, not .dproj)
+        source_path = self._get_source_path(project_path, dproj_settings)
+        if not source_path.exists():
+            raise FileNotFoundError(f"Delphi project source file not found: {source_path}")
 
         # Build compiler command
         compiler_path = self.config_loader.get_compiler_path(platform)
         command = self._build_command(
             compiler_path=compiler_path,
-            project_path=dpr_path,  # Compile the .dpr file, not .dproj
+            project_path=source_path,  # Compile the source file (.dpr or .dpk), not .dproj
             dproj_settings=dproj_settings,
             force_build_all=force_build_all,
             additional_search_paths=additional_search_paths or [],
@@ -92,7 +92,7 @@ class DelphiCompiler:
 
         # Execute compilation
         start_time = time.time()
-        output, exit_code = self._execute_compiler(command, dpr_path.parent)
+        output, exit_code = self._execute_compiler(command, source_path.parent)
         compilation_time = time.time() - start_time
 
         # Parse output
@@ -129,19 +129,28 @@ class DelphiCompiler:
         dproj_path = project_path.with_suffix(".dproj")
         return dproj_path if dproj_path.exists() else None
 
-    def _get_dpr_path(self, project_path: Path) -> Path:
-        """Get .dpr path to actually compile.
+    def _get_source_path(self, project_path: Path, dproj_settings: Optional[any] = None) -> Path:
+        """Get the main source file path to compile.
+
+        This determines the actual source file (.dpr for applications, .dpk for packages)
+        by reading the <MainSource> element from the .dproj file if available.
 
         Args:
-            project_path: Path to .dpr or .dproj file
+            project_path: Path to .dpr, .dpk, or .dproj file
+            dproj_settings: Parsed .dproj settings (if available)
 
         Returns:
-            Path to .dpr file
+            Path to the main source file (.dpr or .dpk)
         """
-        if project_path.suffix.lower() == ".dpr":
+        # If already a source file (.dpr or .dpk), return it directly
+        if project_path.suffix.lower() in [".dpr", ".dpk"]:
             return project_path
 
-        # If given .dproj, return corresponding .dpr file
+        # If we have .dproj settings with main_source, use that
+        if dproj_settings and dproj_settings.main_source:
+            return project_path.parent / dproj_settings.main_source
+
+        # Fallback: look for .dpr file with same name as .dproj
         return project_path.with_suffix(".dpr")
 
     def _build_command(
@@ -382,7 +391,7 @@ class DelphiCompiler:
     def _find_output_executable(
         self, project_path: Path, dproj_settings: Optional[any], platform: str = "Win32"
     ) -> Optional[Path]:
-        """Find the output executable after successful compilation.
+        """Find the output executable or package library after successful compilation.
 
         Args:
             project_path: Project file path
@@ -390,14 +399,22 @@ class DelphiCompiler:
             platform: Target platform ("Win32", "Win64", or "Linux64")
 
         Returns:
-            Path to output executable, or None if not found
+            Path to output file (.exe, .bpl, or Linux executable), or None if not found
         """
-        # Determine file extension based on platform
+        # Determine if this is a package based on main_source extension
+        is_package = False
+        if dproj_settings and dproj_settings.main_source:
+            is_package = dproj_settings.main_source.lower().endswith(".dpk")
+        elif project_path.suffix.lower() == ".dpk":
+            is_package = True
+
+        # Determine file extension based on platform and project type
         if platform == "Linux64":
-            # Linux executables have no extension
-            exe_extension = ""
+            # Linux executables/libraries have no extension (or .so for shared libs)
+            exe_extension = ".so" if is_package else ""
         else:
-            exe_extension = ".exe"
+            # Windows: .bpl for packages, .exe for applications
+            exe_extension = ".bpl" if is_package else ".exe"
 
         # Check if .dproj specifies output directory
         if dproj_settings and dproj_settings.output_dir:

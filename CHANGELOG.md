@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-14
+
+### Fixed
+
+- **Package Project Support (.dpk)**: Fixed compilation of Delphi package projects
+  - Now reads `<MainSource>` element from `.dproj` files to determine actual source file
+  - Supports `.dpk` (package) files in addition to `.dpr` (application) files
+  - Correctly identifies output as `.bpl` (Borland Package Library) for packages instead of `.exe`
+  - Linux packages output `.so` extension
+
+### Changed
+
+- **Compiler**: Renamed internal `_get_dpr_path()` to `_get_source_path()` for clarity
+- **Validation**: Now accepts `.dpr`, `.dpk`, and `.dproj` file extensions as input
+- **DProjParser**: Added `_get_main_source()` method to extract `<MainSource>` element
+- **DProjSettings**: Added `main_source` field to store the main source filename
+
 ## [1.1.0] - 2026-01-13
 
 ### Added

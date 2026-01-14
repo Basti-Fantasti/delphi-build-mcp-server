@@ -229,6 +229,9 @@ class DProjSettings(BaseModel):
 
     active_config: str = Field(description="Active build configuration")
     active_platform: str = Field(description="Active platform")
+    main_source: Optional[str] = Field(
+        default=None, description="Main source file from <MainSource> element (e.g., 'MyApp.dpr' or 'MyPackage.dpk')"
+    )
     compiler_flags: list[str] = Field(
         default_factory=list, description="Compiler command-line flags"
     )
