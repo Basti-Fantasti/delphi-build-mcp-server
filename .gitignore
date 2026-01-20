@@ -34,3 +34,12 @@ build.log
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Local settings
+.beads/
+.claude/
+.venv/
+delphi_config.toml
+nul
+#uv.lock
+
