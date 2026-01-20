@@ -5,12 +5,13 @@ A Model Context Protocol (MCP) server that enables AI coding agents like Claude 
 ## Features
 
 - **Automatic Configuration**: Generate config from IDE build logs with multi-line parsing
-- **Multi-Config Support**: Generate unified config from multiple build logs (Debug/Release × Win32/Win64/Linux64)
+- **Multi-Config Support**: Generate unified config from multiple build logs (Debug/Release × Win32/Win64/Win64x/Linux64)
 - **Smart Compilation**: Reads .dproj files for build settings and compiler flags
+- **Package Support**: Compiles both application (.dpr) and package (.dpk) projects with correct output (.exe/.bpl)
 - **Filtered Output**: Returns only errors, filters out warnings and hints
 - **Multi-Language Support**: Parses both English and German compiler output
 - **Response File Support**: Handles command lines >8000 characters automatically
-- **Cross-Platform**: Supports Win32, Win64, and Linux64 cross-compilation
+- **Cross-Platform**: Supports Win32, Win64, Win64x (LLVM), and Linux64 cross-compilation
 - **80+ Library Paths**: Successfully handles projects with extensive dependencies
 - **Environment Variables**: Auto-expands `${USERNAME}` in paths
 - **MCP Compatible**: Works with Claude Code, Cline, and other MCP clients
@@ -143,7 +144,7 @@ Compile a Delphi project and return parsed results.
 - `project_path` (required): Path to .dpr or .dproj file
 - `force_build_all`: Force rebuild all units
 - `override_config`: Override build config (Debug/Release)
-- `override_platform`: Override platform (Win32/Win64/Linux64)
+- `override_platform`: Override platform (Win32/Win64/Win64x/Linux64)
 - `additional_search_paths`: Extra search paths
 - `additional_flags`: Additional compiler flags
 
