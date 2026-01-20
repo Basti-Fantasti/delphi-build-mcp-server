@@ -12,6 +12,7 @@ class Platform(str, Enum):
 
     WIN32 = "Win32"
     WIN64 = "Win64"
+    WIN64X = "Win64x"
     LINUX64 = "Linux64"
 
 
@@ -24,7 +25,7 @@ class BuildConfig(str, Enum):
 
 # Supported configurations and platforms as constants
 SUPPORTED_CONFIGS = ["Debug", "Release"]
-SUPPORTED_PLATFORMS = ["Win32", "Win64", "Linux64", "Android", "Android64"]
+SUPPORTED_PLATFORMS = ["Win32", "Win64", "Win64x", "Linux64", "Android", "Android64"]
 
 
 class BuildLogEntry(BaseModel):
@@ -135,6 +136,8 @@ class SystemPaths(BaseModel):
     lib_win32_debug: Optional[Path] = Field(default=None)
     lib_win64_release: Optional[Path] = Field(default=None)
     lib_win64_debug: Optional[Path] = Field(default=None)
+    lib_win64x_release: Optional[Path] = Field(default=None)
+    lib_win64x_debug: Optional[Path] = Field(default=None)
     lib_linux64_release: Optional[Path] = Field(default=None)
     lib_linux64_debug: Optional[Path] = Field(default=None)
 
@@ -145,6 +148,8 @@ class SystemPaths(BaseModel):
         "lib_win32_debug",
         "lib_win64_release",
         "lib_win64_debug",
+        "lib_win64x_release",
+        "lib_win64x_debug",
         "lib_linux64_release",
         "lib_linux64_debug",
         mode="before",

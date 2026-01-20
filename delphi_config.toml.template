@@ -21,6 +21,7 @@ root_path = "C:/Program Files (x86)/Embarcadero/Studio/23.0"
 # Compiler executables (auto-detected if not specified)
 # compiler_win32 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc32.exe"
 # compiler_win64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc64.exe"
+# Note: Win64x platform uses the same dcc64.exe compiler as Win64
 
 # =============================================================================
 # System Library Paths (Required)
@@ -37,6 +38,10 @@ lib_win32_release = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/re
 lib_win32_debug = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win32/debug"
 lib_win64_release = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64/release"
 lib_win64_debug = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64/debug"
+
+# Win64x - Modern LLVM-based 64-bit Windows platform (Delphi 12+)
+lib_win64x_release = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64x/release"
+lib_win64x_debug = "C:/Program Files (x86)/Embarcadero/Studio/23.0/lib/win64x/debug"
 
 # =============================================================================
 # Third-Party Library Paths (Optional - comment out if not installed)

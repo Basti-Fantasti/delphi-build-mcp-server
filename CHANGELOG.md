@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-01-20
+
+### Added
+
+- **Win64x Platform Support**: Full support for the new LLVM-based 64-bit Windows platform (Delphi 12+)
+  - `Win64x` added to `Platform` enum and `SUPPORTED_PLATFORMS`
+  - Win64x uses the same `dcc64.exe` compiler as Win64
+  - Platform detection from library paths (distinguishes Win64x from Win64 by checking for `/Win64x/` in paths)
+  - New library path configuration: `lib_win64x_release` and `lib_win64x_debug`
+  - Platform-specific output directory search (`Win64x/Debug`, `Win64x/Release`)
+  - Updated config generator to extract Win64x-specific lib paths
+  - Updated multi-config generator for Win64x platform normalization
+  - Updated configuration template with Win64x examples
+
+### Notes
+
+- Win64x (Modern 64-bit Windows) is Embarcadero's new LLVM-based 64-bit compiler introduced in Delphi 12
+- Win64x produces faster and more optimized code compared to the classic Win64 compiler
+- Both Win64 and Win64x targets use the same `dcc64.exe` compiler executable
+
 ## [1.3.0] - 2026-01-14
 
 ### Added

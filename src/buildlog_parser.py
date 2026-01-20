@@ -116,7 +116,12 @@ class BuildLogParser:
         elif "dcc32" in compiler_name:
             platform = Platform.WIN32
         else:
-            platform = Platform.WIN64
+            # dcc64.exe can be either Win64 or Win64x - check library paths
+            # Win64x paths contain "Win64x" (case-insensitive)
+            if re.search(r"[/\\]Win64x[/\\]", command, re.IGNORECASE):
+                platform = Platform.WIN64X
+            else:
+                platform = Platform.WIN64
 
         # Detect Delphi version from path
         version_match = re.search(r"Studio\\([\d.]+)", str(compiler_path), re.IGNORECASE)
@@ -408,8 +413,8 @@ class BuildLogParser:
         result = []
 
         # Pattern to match Delphi lib paths for the target platform
-        # e.g., "lib/Linux64/release" or "lib\Linux64\debug"
-        platform_name = platform.value  # "Linux64", "Win32", "Win64"
+        # e.g., "lib/Linux64/release" or "lib\Linux64\debug" or "lib\Win64x\release"
+        platform_name = platform.value  # "Linux64", "Win32", "Win64", "Win64x"
         pattern = re.compile(
             rf"[/\\]lib[/\\]{platform_name}[/\\](release|debug)$",
             re.IGNORECASE

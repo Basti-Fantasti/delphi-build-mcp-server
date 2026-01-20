@@ -1,6 +1,6 @@
 [project]
 name = "delphi-build-mcp-server"
-version = "1.3.0"
+version = "1.4.0"
 description = "MCP server for compiling Delphi projects with AI coding agents"
 requires-python = ">=3.10"
 license = {text = "MIT"}

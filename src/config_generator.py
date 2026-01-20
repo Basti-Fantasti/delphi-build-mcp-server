@@ -201,6 +201,8 @@ class ConfigGenerator:
             "lib_win32_debug": None,
             "lib_win64_release": None,
             "lib_win64_debug": None,
+            "lib_win64x_release": None,
+            "lib_win64x_debug": None,
             "lib_linux64_release": None,
             "lib_linux64_debug": None,
         }
@@ -211,6 +213,11 @@ class ConfigGenerator:
                 lib_paths["lib_win32_release"] = path
             elif "\\lib\\win32\\debug" in path_str:
                 lib_paths["lib_win32_debug"] = path
+            elif "\\lib\\win64x\\release" in path_str:
+                # Check Win64x before Win64 (since Win64 is substring of Win64x)
+                lib_paths["lib_win64x_release"] = path
+            elif "\\lib\\win64x\\debug" in path_str:
+                lib_paths["lib_win64x_debug"] = path
             elif "\\lib\\win64\\release" in path_str:
                 lib_paths["lib_win64_release"] = path
             elif "\\lib\\win64\\debug" in path_str:

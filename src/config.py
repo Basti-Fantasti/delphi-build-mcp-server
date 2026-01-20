@@ -227,7 +227,7 @@ class ConfigLoader:
         """Get the compiler executable path for a platform.
 
         Args:
-            platform: Target platform ("Win32", "Win64", or "Linux64")
+            platform: Target platform ("Win32", "Win64", "Win64x", or "Linux64")
 
         Returns:
             Path to compiler executable
@@ -245,6 +245,12 @@ class ConfigLoader:
                 return self.config.delphi.compiler_win64
             return self.config.delphi.root_path / "bin" / "dcc64.exe"
 
+        elif platform == "Win64x":
+            # Win64x uses the same dcc64.exe compiler as Win64
+            if self.config.delphi.compiler_win64:
+                return self.config.delphi.compiler_win64
+            return self.config.delphi.root_path / "bin" / "dcc64.exe"
+
         elif platform == "Linux64":
             if self.config.delphi.compiler_linux64:
                 return self.config.delphi.compiler_linux64
@@ -257,7 +263,7 @@ class ConfigLoader:
         """Get all configured search paths (system + libraries) for a platform.
 
         Args:
-            platform: Target platform ("Win32", "Win64", or "Linux64")
+            platform: Target platform ("Win32", "Win64", "Win64x", or "Linux64")
 
         Returns:
             List of all search paths
@@ -281,6 +287,11 @@ class ConfigLoader:
                 paths.append(system.lib_win64_release)
             if system.lib_win64_debug:
                 paths.append(system.lib_win64_debug)
+        elif platform == "Win64x":
+            if system.lib_win64x_release:
+                paths.append(system.lib_win64x_release)
+            if system.lib_win64x_debug:
+                paths.append(system.lib_win64x_debug)
         elif platform == "Linux64":
             if system.lib_linux64_release:
                 paths.append(system.lib_linux64_release)

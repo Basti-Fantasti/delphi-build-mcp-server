@@ -441,6 +441,8 @@ class DelphiCompiler:
             subdirs = ["Win32/Debug", "Win32/Release"]
         elif platform == "Win64":
             subdirs = ["Win64/Debug", "Win64/Release"]
+        elif platform == "Win64x":
+            subdirs = ["Win64x/Debug", "Win64x/Release"]
         elif platform == "Linux64":
             subdirs = ["Linux64/Debug", "Linux64/Release"]
 

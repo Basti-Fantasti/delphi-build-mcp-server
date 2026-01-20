@@ -128,6 +128,8 @@ class MultiConfigGenerator:
         platform_lower = platform.lower()
         if platform_lower == "win32":
             return "Win32"
+        elif platform_lower == "win64x":
+            return "Win64x"
         elif platform_lower == "win64":
             return "Win64"
         elif platform_lower == "linux64":
@@ -322,7 +324,7 @@ class MultiConfigGenerator:
                 lines.append(f'{field_name} = "{self._format_path(lib_path)}"')
 
         # Add placeholder comments for platforms not in build logs
-        all_platforms = ["Win32", "Win64", "Linux64"]
+        all_platforms = ["Win32", "Win64", "Win64x", "Linux64"]
         for platform in all_platforms:
             if platform not in platforms:
                 for config in ["debug", "release"]:
@@ -386,8 +388,9 @@ class MultiConfigGenerator:
             base_name = self._derive_library_name(path, idx)
 
             # Check if this path is platform-specific (contains platform name in path)
+            # Note: win64x must be checked before win64 since win64 is a substring
             path_lower = str(path).lower()
-            is_platform_specific = any(p in path_lower for p in ["/win32", "/win64", "/linux64", "\\win32", "\\win64", "\\linux64"])
+            is_platform_specific = any(p in path_lower for p in ["/win32", "/win64x", "/win64", "/linux64", "\\win32", "\\win64x", "\\win64", "\\linux64"])
 
             if is_platform_specific:
                 # Add platform suffix for platform-specific paths
