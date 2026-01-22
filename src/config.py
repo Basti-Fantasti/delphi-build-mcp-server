@@ -14,16 +14,101 @@ else:
 from src.models import Config, CompilerConfig, DelphiConfig, LinuxSDKConfig, PathsConfig, SystemPaths
 
 
+# Platform-specific config file naming
+PLATFORM_CONFIG_NAMES = {
+    "Win32": "delphi_config_win32.toml",
+    "Win64": "delphi_config_win64.toml",
+    "Win64x": "delphi_config_win64x.toml",
+    "Linux64": "delphi_config_linux64.toml",
+    "Android": "delphi_config_android.toml",
+    "Android64": "delphi_config_android64.toml",
+}
+
+DEFAULT_CONFIG_NAME = "delphi_config.toml"
+
+
+def get_platform_config_filename(platform: str) -> str:
+    """Get the platform-specific config filename.
+
+    Args:
+        platform: Platform name (e.g., "Win32", "Win64", "Win64x", "Linux64")
+
+    Returns:
+        Platform-specific config filename (e.g., "delphi_config_win64.toml")
+    """
+    # Normalize platform name
+    platform_normalized = platform.lower()
+    for key, filename in PLATFORM_CONFIG_NAMES.items():
+        if key.lower() == platform_normalized:
+            return filename
+    # Fallback for unknown platforms
+    return f"delphi_config_{platform_normalized}.toml"
+
+
+def find_config_file_for_platform(
+    platform: Optional[str] = None, base_dir: Optional[Path] = None
+) -> tuple[Path, str]:
+    """Find the appropriate config file for a platform.
+
+    Search order:
+    1. DELPHI_CONFIG environment variable (explicit override)
+    2. Platform-specific config (e.g., delphi_config_win64.toml)
+    3. Generic config (delphi_config.toml)
+
+    Args:
+        platform: Target platform (optional). If provided, searches for
+            platform-specific config first.
+        base_dir: Base directory to search in (defaults to MCP server directory)
+
+    Returns:
+        Tuple of (config_path, source) where source describes how file was found:
+        - "env" if from DELPHI_CONFIG
+        - "platform" if platform-specific file found
+        - "generic" if fallback to delphi_config.toml
+    """
+    # Check environment variable for explicit override
+    env_path = os.getenv("DELPHI_CONFIG")
+    if env_path:
+        return Path(env_path), "env"
+
+    # Determine base directory
+    if base_dir is None:
+        # Use MCP server directory (parent of src/)
+        base_dir = Path(__file__).parent.parent
+
+    # Search for platform-specific config if platform is provided
+    if platform:
+        platform_filename = get_platform_config_filename(platform)
+        platform_config_path = base_dir / platform_filename
+        if platform_config_path.exists():
+            return platform_config_path, "platform"
+
+    # Fallback to generic config
+    generic_path = base_dir / DEFAULT_CONFIG_NAME
+    return generic_path, "generic"
+
+
 class ConfigLoader:
     """Loads and validates Delphi configuration from TOML files."""
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Optional[Path] = None, platform: Optional[str] = None):
         """Initialize config loader.
 
         Args:
             config_path: Path to config file. If None, searches standard locations.
+            platform: Target platform for platform-specific config file search.
+                If provided and no explicit config_path, will search for
+                platform-specific config (e.g., delphi_config_win64.toml) first.
         """
-        self.config_path = config_path or self._find_config_file()
+        self.platform = platform
+        self.config_source: Optional[str] = None  # "env", "platform", or "generic"
+
+        if config_path:
+            self.config_path = config_path
+            self.config_source = "explicit"
+        else:
+            self.config_path, self.config_source = self._find_config_file()
+
         self.config: Optional[Config] = None
 
     def load(self) -> Config:
@@ -64,35 +149,21 @@ class ConfigLoader:
 
         return self.config
 
-    def _find_config_file(self) -> Path:
-        """Find the config file in standard locations.
+    def _find_config_file(self) -> tuple[Path, str]:
+        """Find the config file using platform-aware search.
 
         Returns:
-            Path to config file
+            Tuple of (path, source) where source is one of:
+            - "env" if from DELPHI_CONFIG
+            - "platform" if platform-specific file found
+            - "generic" if fallback to delphi_config.toml
 
         Searches:
-            1. DELPHI_CONFIG environment variable
-            2. Current working directory
-            3. Script directory
+            1. DELPHI_CONFIG environment variable (explicit override)
+            2. Platform-specific config (e.g., delphi_config_win64.toml)
+            3. Generic config (delphi_config.toml)
         """
-        # Check environment variable
-        env_path = os.getenv("DELPHI_CONFIG")
-        if env_path:
-            return Path(env_path)
-
-        # Check current directory
-        cwd_config = Path.cwd() / "delphi_config.toml"
-        if cwd_config.exists():
-            return cwd_config
-
-        # Check script directory
-        script_dir = Path(__file__).parent.parent
-        script_config = script_dir / "delphi_config.toml"
-        if script_config.exists():
-            return script_config
-
-        # Return default path (will fail later if doesn't exist)
-        return cwd_config
+        return find_config_file_for_platform(platform=self.platform)
 
     def _expand_env_vars(self, config: dict[str, Any]) -> dict[str, Any]:
         """Recursively expand environment variables in config values.

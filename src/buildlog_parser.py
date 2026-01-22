@@ -75,7 +75,17 @@ class BuildLogParser:
             raise ValueError("Compiler command not found in build log")
 
         # Collect the compiler command and all continuation lines
-        # Continuation lines are indented with spaces
+        # Continuation lines are indented with spaces, BUT we must stop when we
+        # encounter compiler output (warnings, errors, or hints).
+        # Compiler output lines look like:
+        #   - "path\file.pas(line,col): warning W1234: message"
+        #   - "path\file.pas(line,col): error E1234: message"
+        #   - "path\file.pas(line,col): hint H1234: message"
+        compiler_output_pattern = re.compile(
+            r"^\s+\S+\.\w+\(\d+,\d+\):\s*(warning|error|hint|fatal)\s+[A-Z]\d+:",
+            re.IGNORECASE
+        )
+
         command_lines = [lines[compiler_line_idx]]
         idx = compiler_line_idx + 1
 
@@ -83,6 +93,9 @@ class BuildLogParser:
             line = lines[idx]
             # Check if line is a continuation (starts with spaces)
             if line and (line.startswith("  ") or line.startswith("\t")):
+                # But stop if it looks like compiler output (warning/error/hint)
+                if compiler_output_pattern.match(line):
+                    break
                 command_lines.append(line.strip())
                 idx += 1
             else:
@@ -313,12 +326,12 @@ class BuildLogParser:
         # Extract flags like -B, -Q, -$O-, --no-config, -TX.exe, etc.
         # Pattern matches:
         # 1. --flag-name (long flags like --no-config)
-        # 2. -$X+ or -$X- (compiler switches)
+        # 2. -$X+, -$X-, -$X0, -$X1 (compiler switches with value)
         # 3. -TX.ext (target extension flags)
         # 4. -X (single letter flags like -B, -Q)
         flag_patterns = [
             r"(--[a-z][-a-z]*)",  # Long flags like --no-config
-            r"(-\$[A-Z][+-]?)",   # Compiler switches like -$O-, -$W+
+            r"(-\$[A-Z][0-9+-])",  # Compiler switches like -$O-, -$W+, -$D0, -$L-
             r"(-T[A-Z]\.[a-z]+)", # Target extension like -TX.exe
             r"(-[A-Z])(?=\s|$)",  # Single letter flags like -B, -Q
         ]

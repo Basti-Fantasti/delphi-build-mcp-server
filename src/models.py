@@ -272,6 +272,22 @@ class DProjSettings(BaseModel):
         return [Path(p) if isinstance(p, str) else p for p in v]
 
 
+class ExtendConfigResult(BaseModel):
+    """Result of configuration extension operation."""
+
+    success: bool = Field(description="Whether extension succeeded")
+    config_file_path: str = Field(description="Path to extended config file")
+    paths_added: int = Field(description="Number of new library paths added")
+    paths_skipped: int = Field(description="Number of duplicate paths skipped")
+    platforms_added: list[str] = Field(
+        default_factory=list, description="New platforms added (e.g., ['Win64x'])"
+    )
+    settings_updated: dict[str, int] = Field(
+        default_factory=dict, description="Count of settings updated per section"
+    )
+    message: str = Field(description="Human-readable result message")
+
+
 class BuildLogInfo(BaseModel):
     """Information extracted from a build log."""
 

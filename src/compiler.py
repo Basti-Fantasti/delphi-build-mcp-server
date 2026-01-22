@@ -366,7 +366,7 @@ class DelphiCompiler:
                 actual_command = command
                 response_file = None
 
-            # Execute compilation
+            # Execute compilation with timeout (5 minutes max)
             result = subprocess.run(
                 actual_command,
                 cwd=str(working_dir),
@@ -374,6 +374,7 @@ class DelphiCompiler:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                timeout=300,
             )
 
             # Combine stdout and stderr
@@ -385,6 +386,8 @@ class DelphiCompiler:
 
             return output, result.returncode
 
+        except subprocess.TimeoutExpired:
+            return "Compilation timed out after 5 minutes", 1
         except Exception as e:
             return f"Compiler execution failed: {e}", 1
 

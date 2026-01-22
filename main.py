@@ -13,6 +13,7 @@ from mcp.types import Tool, TextContent
 from src.compiler import DelphiCompiler
 from src.config import ConfigLoader
 from src.config_generator import ConfigGenerator
+from src.config_extender import ConfigExtender
 from src.multi_config_generator import MultiConfigGenerator
 
 
@@ -72,7 +73,9 @@ GENERATE_CONFIG_TOOL = Tool(
     description=(
         "Generate delphi_config.toml file automatically by parsing an IDE build log. "
         "Extracts all library paths, compiler settings, and configuration from a successful "
-        "compilation performed in the Delphi IDE. This eliminates manual configuration."
+        "compilation performed in the Delphi IDE. This eliminates manual configuration. "
+        "Supports platform-specific config files (e.g., delphi_config_win64.toml) for "
+        "simpler multi-platform setups."
     ),
     inputSchema={
         "type": "object",
@@ -83,8 +86,13 @@ GENERATE_CONFIG_TOOL = Tool(
             },
             "output_config_path": {
                 "type": "string",
-                "description": "Output path for generated config file",
-                "default": "delphi_config.toml",
+                "description": "Output path for generated config file. If not specified, generates platform-specific filename (e.g., delphi_config_win32.toml) by default.",
+                "default": None,
+            },
+            "use_platform_specific_name": {
+                "type": "boolean",
+                "description": "Generate platform-specific filename (e.g., delphi_config_win64.toml) based on detected platform. Set to false for generic delphi_config.toml. Ignored if output_config_path is specified.",
+                "default": True,
             },
             "use_env_vars": {
                 "type": "boolean",
@@ -100,7 +108,8 @@ GENERATE_MULTI_CONFIG_TOOL = Tool(
     name="generate_config_from_multiple_build_logs",
     description=(
         "Generate delphi_config.toml file from multiple IDE build logs for different configurations "
-        "and platforms. Creates a hierarchical config with platform and config-specific settings. "
+        "and platforms. By default, creates separate platform-specific config files "
+        "(e.g., delphi_config_win32.toml, delphi_config_win64.toml). "
         "Use this when you have build logs from multiple configurations (Debug/Release) and/or "
         "platforms (Win32/Win64/Linux64)."
     ),
@@ -114,8 +123,18 @@ GENERATE_MULTI_CONFIG_TOOL = Tool(
             },
             "output_config_path": {
                 "type": "string",
-                "description": "Output path for generated config file",
+                "description": "Output path for unified config file. Only used when generate_separate_files=False.",
                 "default": "delphi_config.toml",
+            },
+            "generate_separate_files": {
+                "type": "boolean",
+                "description": "Generate separate platform-specific config files (default). Set to false for a single unified config.",
+                "default": True,
+            },
+            "output_dir": {
+                "type": "string",
+                "description": "Output directory for generated platform-specific files. Defaults to current directory.",
+                "default": ".",
             },
             "use_env_vars": {
                 "type": "boolean",
@@ -127,11 +146,45 @@ GENERATE_MULTI_CONFIG_TOOL = Tool(
     },
 )
 
+EXTEND_CONFIG_TOOL = Tool(
+    name="extend_config_from_build_log",
+    description=(
+        "Extend an existing delphi_config.toml with settings from a new IDE build log. "
+        "Useful for adding support for new platforms (e.g., Win64x) or libraries without "
+        "regenerating the entire configuration. Intelligently merges new paths while "
+        "preserving existing settings and avoiding duplicates."
+    ),
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "existing_config_path": {
+                "type": "string",
+                "description": "Absolute path to existing delphi_config.toml file",
+            },
+            "build_log_path": {
+                "type": "string",
+                "description": "Absolute path to IDE build log file",
+            },
+            "output_config_path": {
+                "type": "string",
+                "description": "Output path for extended config file (default: overwrites existing)",
+                "default": None,
+            },
+            "use_env_vars": {
+                "type": "boolean",
+                "description": "Replace user paths with ${USERNAME} environment variable",
+                "default": True,
+            },
+        },
+        "required": ["existing_config_path", "build_log_path"],
+    },
+)
+
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools."""
-    return [COMPILE_TOOL, GENERATE_CONFIG_TOOL, GENERATE_MULTI_CONFIG_TOOL]
+    return [COMPILE_TOOL, GENERATE_CONFIG_TOOL, GENERATE_MULTI_CONFIG_TOOL, EXTEND_CONFIG_TOOL]
 
 
 @app.call_tool()
@@ -148,6 +201,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "generate_config_from_multiple_build_logs":
             result = await handle_generate_multi_config(arguments)
+            return [TextContent(type="text", text=result)]
+
+        elif name == "extend_config_from_build_log":
+            result = await handle_extend_config(arguments)
             return [TextContent(type="text", text=result)]
 
         else:
@@ -207,7 +264,9 @@ async def handle_generate_config(arguments: dict) -> str:
 
     # Extract arguments
     build_log_path = Path(arguments["build_log_path"])
-    output_config_path = Path(arguments.get("output_config_path", "delphi_config.toml"))
+    output_config_path_str = arguments.get("output_config_path")
+    output_config_path = Path(output_config_path_str) if output_config_path_str else None
+    use_platform_specific_name = arguments.get("use_platform_specific_name", True)
     use_env_vars = arguments.get("use_env_vars", True)
 
     # Initialize generator
@@ -215,7 +274,9 @@ async def handle_generate_config(arguments: dict) -> str:
 
     # Generate config
     result = generator.generate_from_build_log(
-        build_log_path=build_log_path, output_path=output_config_path
+        build_log_path=build_log_path,
+        output_path=output_config_path,
+        use_platform_specific_name=use_platform_specific_name,
     )
 
     # Convert to JSON
@@ -235,7 +296,11 @@ async def handle_generate_multi_config(arguments: dict) -> str:
 
     # Extract arguments
     build_log_paths = arguments["build_log_paths"]
-    output_config_path = Path(arguments.get("output_config_path", "delphi_config.toml"))
+    output_config_path_str = arguments.get("output_config_path")
+    output_config_path = Path(output_config_path_str) if output_config_path_str else None
+    generate_separate_files = arguments.get("generate_separate_files", True)
+    output_dir_str = arguments.get("output_dir", ".")
+    output_dir = Path(output_dir_str)
     use_env_vars = arguments.get("use_env_vars", True)
 
     # Initialize generator
@@ -243,7 +308,43 @@ async def handle_generate_multi_config(arguments: dict) -> str:
 
     # Generate config from multiple logs
     result = generator.generate_from_build_logs(
-        build_log_paths=build_log_paths, output_path=output_config_path
+        build_log_paths=build_log_paths,
+        output_path=output_config_path,
+        generate_separate_files=generate_separate_files,
+        output_dir=output_dir,
+    )
+
+    # Convert to JSON
+    return json.dumps(result.model_dump(), indent=2)
+
+
+async def handle_extend_config(arguments: dict) -> str:
+    """Handle extend_config_from_build_log tool invocation.
+
+    Args:
+        arguments: Tool arguments
+
+    Returns:
+        JSON string with extension result
+    """
+    import json
+
+    # Extract arguments
+    existing_config_path = Path(arguments["existing_config_path"])
+    build_log_path = Path(arguments["build_log_path"])
+    output_config_path = arguments.get("output_config_path")
+    if output_config_path:
+        output_config_path = Path(output_config_path)
+    use_env_vars = arguments.get("use_env_vars", True)
+
+    # Initialize extender
+    extender = ConfigExtender(use_env_vars=use_env_vars)
+
+    # Extend config
+    result = extender.extend_from_build_log(
+        existing_config_path=existing_config_path,
+        build_log_path=build_log_path,
+        output_path=output_config_path,
     )
 
     # Convert to JSON

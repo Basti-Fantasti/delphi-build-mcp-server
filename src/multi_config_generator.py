@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.buildlog_parser import BuildLogParser
+from src.config import get_platform_config_filename, DEFAULT_CONFIG_NAME
 from src.models import (
     BuildLogEntry,
     BuildLogInfo,
@@ -31,17 +32,26 @@ class MultiConfigGenerator:
             use_env_vars: Whether to replace paths with environment variables
         """
         self.use_env_vars = use_env_vars
+        self._delphi_version = "23.0"  # Default, updated during generation
 
     def generate_from_build_logs(
         self,
         build_log_paths: list[str],
-        output_path: Path,
+        output_path: Optional[Path] = None,
+        generate_separate_files: bool = True,
+        output_dir: Optional[Path] = None,
     ) -> MultiConfigGenerationResult:
         """Generate configuration from multiple build log files.
 
         Args:
             build_log_paths: List of paths to IDE build log files
-            output_path: Path where to save the generated config
+            output_path: Path where to save the generated config. Used when
+                generate_separate_files=False.
+            generate_separate_files: If True (default), generates separate platform-specific
+                config files (e.g., delphi_config_win32.toml, delphi_config_win64.toml).
+                Set to False to generate a single unified config.
+            output_dir: Directory for output files when generate_separate_files=True.
+                Defaults to current directory.
 
         Returns:
             MultiConfigGenerationResult with generation statistics
@@ -91,12 +101,46 @@ class MultiConfigGenerator:
         if not parsed_logs:
             raise ValueError("No build logs could be parsed successfully")
 
-        # Generate TOML content
-        toml_content = self._generate_toml(parsed_logs)
+        # Determine output directory
+        if output_dir is None:
+            output_dir = Path(".")
 
-        # Write to file
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(toml_content)
+        generated_files: list[str] = []
+
+        if generate_separate_files:
+            # Generate separate platform-specific config files
+            platforms = set(k[1] for k in parsed_logs.keys())
+            for platform in sorted(platforms):
+                # Get logs for this platform only
+                platform_logs = {
+                    k: v for k, v in parsed_logs.items() if k[1] == platform
+                }
+                # Generate TOML content for this platform
+                toml_content = self._generate_toml(platform_logs)
+                # Write to platform-specific file
+                platform_filename = get_platform_config_filename(platform)
+                platform_output_path = output_dir / platform_filename
+                with open(platform_output_path, "w", encoding="utf-8") as f:
+                    f.write(toml_content)
+                generated_files.append(str(platform_output_path.absolute()))
+
+            # config_file_path will contain comma-separated list of files
+            config_file_path = ", ".join(generated_files)
+            message = f"Generated {len(generated_files)} platform-specific config file(s) from {len(build_log_paths)} build log(s)"
+        else:
+            # Generate single unified config
+            if output_path is None:
+                output_path = output_dir / DEFAULT_CONFIG_NAME
+
+            toml_content = self._generate_toml(parsed_logs)
+
+            # Write to file
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(toml_content)
+
+            config_file_path = str(output_path.absolute())
+            generated_files.append(config_file_path)
+            message = f"Configuration file generated successfully from {len(build_log_paths)} build log(s)"
 
         # Prepare statistics
         statistics = {
@@ -104,14 +148,15 @@ class MultiConfigGenerator:
             "configs_found": list(set(e.config for e in log_entries)),
             "platforms_found": list(set(e.platform for e in log_entries)),
             "total_library_paths": self._count_total_paths(parsed_logs),
+            "files_generated": generated_files,
         }
 
         return MultiConfigGenerationResult(
             success=True,
-            config_file_path=str(output_path.absolute()),
+            config_file_path=config_file_path,
             build_logs_processed=log_entries,
             statistics=statistics,
-            message=f"Configuration file generated successfully from {len(build_log_paths)} build log(s)",
+            message=message,
         )
 
     def _normalize_config(self, config: str) -> str:
@@ -177,6 +222,9 @@ class MultiConfigGenerator:
 
         # Get any log info to extract common settings
         first_log = next(iter(parsed_logs.values()))
+
+        # Store Delphi version for use in _format_path
+        self._delphi_version = first_log.delphi_version
 
         # Header
         lines.append("# Delphi Build MCP Server Configuration")
@@ -655,20 +703,33 @@ class MultiConfigGenerator:
         path_str = str(path)
 
         # Fix encoding corruption from IDE build logs
-        corrupted_patterns = [
-            ("½SUSERDIR%", "${USERDIR}"),
-            ("½SUSERNAME%", "${USERNAME}"),
-            ("½S", "${"),
-        ]
-        for corrupted, fixed in corrupted_patterns:
-            path_str = path_str.replace(corrupted, fixed)
+        # The IDE sometimes corrupts environment variables like $(USERDIR) to ½SUSERDIR%
+        # This happens due to character encoding issues (½ is 0xBD, $ is 0x24)
+        # $(USERDIR) in Delphi expands to Documents\Embarcadero\Studio\VERSION
+        username = os.getenv("USERNAME", "")
+        if username:
+            userdir_path = f"C:/Users/{username}/Documents/Embarcadero/Studio/{self._delphi_version}"
+            corrupted_patterns = [
+                ("½SUSERDIR%", userdir_path),
+                ("½SUSERNAME%", username),
+            ]
+            for corrupted, fixed in corrupted_patterns:
+                path_str = path_str.replace(corrupted, fixed)
 
         if self.use_env_vars:
-            username = os.getenv("USERNAME", "")
+            # Handle both backslash and forward slash paths (case-insensitive)
             if username:
-                user_pattern = f"C:\\Users\\{username}"
-                path_str = path_str.replace(user_pattern, "C:/Users/${USERNAME}")
-                path_str = path_str.replace(user_pattern.lower(), "C:/Users/${USERNAME}")
+                path_str_lower = path_str.lower()
+                user_pattern_bs = f"c:\\users\\{username.lower()}"
+                user_pattern_fs = f"c:/users/{username.lower()}"
+
+                # Find and replace (preserving case of the replacement)
+                if user_pattern_bs in path_str_lower:
+                    idx = path_str_lower.find(user_pattern_bs)
+                    path_str = path_str[:idx] + "C:/Users/${USERNAME}" + path_str[idx + len(user_pattern_bs):]
+                elif user_pattern_fs in path_str_lower:
+                    idx = path_str_lower.find(user_pattern_fs)
+                    path_str = path_str[:idx] + "C:/Users/${USERNAME}" + path_str[idx + len(user_pattern_fs):]
 
         path_str = path_str.replace("\\", "/")
 
@@ -685,11 +746,18 @@ if __name__ == "__main__":
         epilog="""
 Examples:
   python -m src.multi_config_generator debug.log release.log
-  python -m src.multi_config_generator win32_debug.log win64_release.log -o my_config.toml
+  python -m src.multi_config_generator win32.log win64.log -d ./configs/
   python -m src.multi_config_generator *.log --no-env-vars
+  python -m src.multi_config_generator win32.log win64.log --unified -o my_config.toml
 
-This tool merges multiple build logs (e.g., Debug/Release, Win32/Win64) into a
-single hierarchical configuration file with platform and config-specific sections.
+Platform-specific config files (default behavior):
+  By default, generates separate config files for each platform detected:
+    - delphi_config_win32.toml
+    - delphi_config_win64.toml
+    - delphi_config_win64x.toml
+    - delphi_config_linux64.toml
+
+  Use --unified (or -u) to generate a single delphi_config.toml instead.
         """,
     )
 
@@ -704,8 +772,23 @@ single hierarchical configuration file with platform and config-specific section
         "-o",
         "--output",
         type=str,
-        default="delphi_config.toml",
-        help="Output configuration file path (default: delphi_config.toml)",
+        default=None,
+        help="Output configuration file path (only used with --unified)",
+    )
+
+    parser.add_argument(
+        "-u",
+        "--unified",
+        action="store_true",
+        help="Generate single unified delphi_config.toml instead of platform-specific files",
+    )
+
+    parser.add_argument(
+        "-d",
+        "--output-dir",
+        type=str,
+        default=".",
+        help="Output directory for generated files (default: current directory)",
     )
 
     parser.add_argument(
@@ -716,8 +799,9 @@ single hierarchical configuration file with platform and config-specific section
 
     args = parser.parse_args()
 
-    # Convert output path
-    output_path = Path(args.output)
+    # Convert paths
+    output_path = Path(args.output) if args.output else None
+    output_dir = Path(args.output_dir)
 
     # Validate build log files exist
     missing_files = []
@@ -732,17 +816,28 @@ single hierarchical configuration file with platform and config-specific section
         sys.exit(1)
 
     # Generate config
+    # Default is platform-specific files, unless --unified is specified
     try:
         print(f"Processing {len(args.build_logs)} build log(s):")
         for log_path in args.build_logs:
             print(f"  - {log_path}")
 
         generator = MultiConfigGenerator(use_env_vars=not args.no_env_vars)
-        result = generator.generate_from_build_logs(args.build_logs, output_path)
+        result = generator.generate_from_build_logs(
+            args.build_logs,
+            output_path=output_path,
+            generate_separate_files=not args.unified,
+            output_dir=output_dir,
+        )
 
         # Print results
         print(f"\n[SUCCESS] {result.message}")
-        print(f"\nGenerated: {result.config_file_path}")
+        if not args.unified:
+            print(f"\nGenerated files:")
+            for file_path in result.statistics.get("files_generated", []):
+                print(f"  - {file_path}")
+        else:
+            print(f"\nGenerated: {result.config_file_path}")
         print(f"\nBuild Logs Processed:")
         for entry in result.build_logs_processed:
             auto_str = " (auto-detected)" if entry.auto_detected else ""

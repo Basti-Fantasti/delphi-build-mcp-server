@@ -86,15 +86,16 @@ result = generator.generate_from_build_logs(
     build_log_paths=[
         "build_debug_win32.log",
         "build_release_linux64.log"
-    ],
-    output_path=Path("delphi_config.toml")
+    ]
 )
+# Creates: delphi_config_win32.toml, delphi_config_linux64.toml
 ```
 
-This creates a unified `delphi_config.toml` with:
-- Common library paths shared across all configurations
-- Platform-specific paths (e.g., Linux64 SDK paths)
-- Configuration-specific compiler flags (e.g., `--libpath` for Linux64)
+By default, this creates separate platform-specific config files with:
+- Platform-specific library paths
+- Platform-specific compiler flags (e.g., `--libpath` for Linux64)
+
+Use `generate_separate_files=False` for a single unified config instead.
 
 ## Step 3: Configure Claude Code
 
@@ -267,7 +268,7 @@ The MCP server handles these automatically - no configuration needed:
 - ✅ **Smart Path Handling**: RTL/VCL source paths excluded (only lib_*.dcu used)
 - ✅ **80+ Library Support**: Handles projects with extensive dependencies
 - ✅ **Cross-Platform**: Supports Win32, Win64, and Linux64 compilation
-- ✅ **Multi-Config**: Generate unified config from multiple build logs (Debug/Release × platforms)
+- ✅ **Multi-Config**: Generate platform-specific configs from multiple build logs (Debug/Release × platforms)
 
 ## Next Steps
 
@@ -325,7 +326,7 @@ Please paste your build log or tell me where it's saved.
 
 [User provides log]
 
-Perfect! I've generated delphi_config.toml with 47 library paths.
+Perfect! I've generated the config file with 47 library paths.
 The server is now ready to compile your projects.
 ```
 
@@ -343,11 +344,11 @@ Claude: I'll help you set up cross-platform compilation. Please:
 
 [User provides logs]
 
-I'll generate a unified config from both build logs...
+I'll generate platform-specific configs from both build logs...
 
 [Uses generate_config_from_multiple_build_logs tool]
 
-Done! Your delphi_config.toml now supports both platforms.
+Done! Generated delphi_config_win32.toml and delphi_config_linux64.toml.
 Let me compile for Linux64 to verify...
 
 [Compiles with override_platform: "Linux64"]

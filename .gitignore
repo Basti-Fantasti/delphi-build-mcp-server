@@ -26,6 +26,7 @@ htmlcov/
 
 # Machine-specific configuration
 delphi_config.toml
+delphi_config_*.toml
 
 # Build logs and temporary files
 build.log

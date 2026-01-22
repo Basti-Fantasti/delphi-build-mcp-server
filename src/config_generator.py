@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.buildlog_parser import BuildLogParser
+from src.config import get_platform_config_filename, DEFAULT_CONFIG_NAME
 from src.models import BuildLogInfo, ConfigGenerationResult, DetectedInfo
 
 
@@ -19,15 +20,23 @@ class ConfigGenerator:
             use_env_vars: Whether to replace paths with environment variables
         """
         self.use_env_vars = use_env_vars
+        self._delphi_version = "23.0"  # Default, updated during generation
 
     def generate_from_build_log(
-        self, build_log_path: Path, output_path: Path
+        self,
+        build_log_path: Path,
+        output_path: Optional[Path] = None,
+        use_platform_specific_name: bool = True,
     ) -> ConfigGenerationResult:
         """Generate configuration from a build log file.
 
         Args:
             build_log_path: Path to IDE build log
-            output_path: Path where to save the generated config
+            output_path: Path where to save the generated config. If None,
+                uses platform-specific name by default (e.g., delphi_config_win64.toml).
+            use_platform_specific_name: If True (default) and output_path is None,
+                generates platform-specific filename based on the platform detected
+                in the build log. Set to False to generate generic delphi_config.toml.
 
         Returns:
             ConfigGenerationResult with generation statistics
@@ -39,6 +48,14 @@ class ConfigGenerator:
         # Parse the build log
         parser = BuildLogParser(build_log_path)
         log_info = parser.parse()
+
+        # Determine output path
+        if output_path is None:
+            if use_platform_specific_name:
+                output_filename = get_platform_config_filename(log_info.platform.value)
+            else:
+                output_filename = DEFAULT_CONFIG_NAME
+            output_path = Path(output_filename)
 
         # Generate TOML content
         toml_content = self._generate_toml(log_info)
@@ -78,6 +95,9 @@ class ConfigGenerator:
         Returns:
             TOML file content as string
         """
+        # Store Delphi version for use in _format_path
+        self._delphi_version = log_info.delphi_version
+
         lines = []
 
         # Header
@@ -504,23 +524,34 @@ class ConfigGenerator:
         path_str = str(path)
 
         # Fix encoding corruption from IDE build logs
-        # The IDE sometimes corrupts environment variables like %USERDIR% to ½SUSERDIR%
+        # The IDE sometimes corrupts environment variables like $(USERDIR) to ½SUSERDIR%
         # This happens due to character encoding issues (½ is 0xBD, $ is 0x24)
-        corrupted_patterns = [
-            ("½SUSERDIR%", "${USERDIR}"),
-            ("½SUSERNAME%", "${USERNAME}"),
-            ("½S", "${"),  # Generic fix for any other corrupted env vars
-        ]
-        for corrupted, fixed in corrupted_patterns:
-            path_str = path_str.replace(corrupted, fixed)
+        # $(USERDIR) in Delphi expands to Documents\Embarcadero\Studio\VERSION
+        username = os.getenv("USERNAME", "")
+        if username:
+            userdir_path = f"C:/Users/{username}/Documents/Embarcadero/Studio/{self._delphi_version}"
+            corrupted_patterns = [
+                ("½SUSERDIR%", userdir_path),
+                ("½SUSERNAME%", username),
+            ]
+            for corrupted, fixed in corrupted_patterns:
+                path_str = path_str.replace(corrupted, fixed)
 
         if self.use_env_vars:
-            # Replace common patterns
-            username = os.getenv("USERNAME", "")
+            # Replace common patterns with environment variables
             if username:
-                user_pattern = f"C:\\Users\\{username}"
-                path_str = path_str.replace(user_pattern, "C:/Users/${USERNAME}")
-                path_str = path_str.replace(user_pattern.lower(), "C:/Users/${USERNAME}")
+                # Handle both backslash and forward slash paths (case-insensitive)
+                path_str_lower = path_str.lower()
+                user_pattern_bs = f"c:\\users\\{username.lower()}"
+                user_pattern_fs = f"c:/users/{username.lower()}"
+
+                # Find and replace (preserving case of the replacement)
+                if user_pattern_bs in path_str_lower:
+                    idx = path_str_lower.find(user_pattern_bs)
+                    path_str = path_str[:idx] + "C:/Users/${USERNAME}" + path_str[idx + len(user_pattern_bs):]
+                elif user_pattern_fs in path_str_lower:
+                    idx = path_str_lower.find(user_pattern_fs)
+                    path_str = path_str[:idx] + "C:/Users/${USERNAME}" + path_str[idx + len(user_pattern_fs):]
 
         # Convert backslashes to forward slashes
         path_str = path_str.replace("\\", "/")
@@ -539,7 +570,18 @@ if __name__ == "__main__":
 Examples:
   python -m src.config_generator build.log
   python -m src.config_generator build.log -o my_config.toml
+  python -m src.config_generator build.log --generic
   python -m src.config_generator build.log --no-env-vars
+
+Platform-specific config files (default behavior):
+  By default, the output filename is automatically determined from the
+  platform detected in the build log:
+    - Win32 build log -> delphi_config_win32.toml
+    - Win64 build log -> delphi_config_win64.toml
+    - Win64x build log -> delphi_config_win64x.toml
+    - Linux64 build log -> delphi_config_linux64.toml
+
+  Use --generic (or -g) to generate a generic delphi_config.toml instead.
         """,
     )
 
@@ -553,8 +595,15 @@ Examples:
         "-o",
         "--output",
         type=str,
-        default="delphi_config.toml",
-        help="Output configuration file path (default: delphi_config.toml)",
+        default=None,
+        help="Output configuration file path (overrides default platform-specific naming)",
+    )
+
+    parser.add_argument(
+        "-g",
+        "--generic",
+        action="store_true",
+        help="Generate generic delphi_config.toml instead of platform-specific filename",
     )
 
     parser.add_argument(
@@ -567,7 +616,7 @@ Examples:
 
     # Convert paths
     build_log_path = Path(args.build_log)
-    output_path = Path(args.output)
+    output_path = Path(args.output) if args.output else None
 
     # Check if build log exists
     if not build_log_path.exists():
@@ -575,10 +624,15 @@ Examples:
         sys.exit(1)
 
     # Generate config
+    # Default is platform-specific naming, unless --generic is specified
     try:
         print(f"Reading build log: {build_log_path}")
         generator = ConfigGenerator(use_env_vars=not args.no_env_vars)
-        result = generator.generate_from_build_log(build_log_path, output_path)
+        result = generator.generate_from_build_log(
+            build_log_path,
+            output_path,
+            use_platform_specific_name=not args.generic,
+        )
 
         # Print results
         print(f"\n[SUCCESS] {result.message}")
