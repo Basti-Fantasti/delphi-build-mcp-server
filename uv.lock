@@ -366,7 +366,7 @@ wheels = [
 
 [[package]]
 name = "delphi-build-mcp-server"
-version = "1.7.0"
+version = "1.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },

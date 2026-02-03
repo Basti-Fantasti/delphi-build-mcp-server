@@ -105,8 +105,6 @@ Add the MCP server to your Claude Code configuration file.
 
 Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
-**Option 1: Using UV (Recommended)**
-
 ```json
 {
   "mcpServers": {
@@ -116,26 +114,7 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
         "run",
         "--directory",
         "X:\\path\\to\\delphi-build-mcp-server",
-        "python",
         "main.py"
-      ],
-      "env": {
-        "DELPHI_CONFIG": "X:\\path\\to\\delphi_config.toml"
-      }
-    }
-  }
-}
-```
-
-**Option 2: Direct Python from UV environment**
-
-```json
-{
-  "mcpServers": {
-    "delphi-build": {
-      "command": "X:\\path\\to\\delphi-build-mcp-server\\.venv\\Scripts\\python.exe",
-      "args": [
-        "X:\\path\\to\\delphi-build-mcp-server\\main.py"
       ],
       "env": {
         "DELPHI_CONFIG": "X:\\path\\to\\delphi_config.toml"
@@ -149,8 +128,6 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
-**Option 1: Using UV (Recommended)**
-
 ```json
 {
   "mcpServers": {
@@ -160,7 +137,6 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
         "run",
         "--directory",
         "/path/to/delphi-build-mcp-server",
-        "python",
         "main.py"
       ],
       "env": {
@@ -171,23 +147,84 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-**Option 2: Direct Python from UV environment**
+### Step 3b: Configure for WSL-Ubuntu
+
+Two options for using the Delphi MCP server from WSL-Ubuntu:
+
+#### Option 1: stdio via WSL Interop (Simplest)
+
+WSL can execute Windows binaries directly. This uses stdio transport through the Windows Python -- no HTTP server needed, no manual start. Claude Code manages the server lifecycle automatically.
+
+Edit `~/.claude.json` (or project-level `.mcp.json`) in WSL:
 
 ```json
 {
   "mcpServers": {
     "delphi-build": {
-      "command": "/path/to/delphi-build-mcp-server/.venv/bin/python",
+      "command": "/mnt/c/Users/<username>/path/to/delphi-build-mcp-server/.venv/Scripts/python.exe",
       "args": [
-        "/path/to/delphi-build-mcp-server/main.py"
+        "/mnt/c/Users/<username>/path/to/delphi-build-mcp-server/main.py"
       ],
       "env": {
-        "DELPHI_CONFIG": "/path/to/delphi_config.toml"
+        "DELPHI_CONFIG": "C:\\Users\\<username>\\path\\to\\delphi_config.toml"
       }
     }
   }
 }
 ```
+
+> **Note:** The `DELPHI_CONFIG` path must use Windows-style paths since the server runs as a Windows process.
+
+You can verify this works by running `test_stdio_wsl.sh` (included in this repository) from WSL.
+
+#### Option 2: Streamable HTTP (Network Transport)
+
+Run the MCP server as a persistent HTTP service on Windows and connect from WSL over the network.
+
+**1. Start the MCP server on Windows:**
+
+```bash
+cd C:\path\to\delphi-build-mcp-server
+uv run main.py --transport streamable-http
+```
+
+To start the server automatically at logon, place `start_mcp_server.bat` (included in this repository) in your Windows Startup folder (`Win+R` -> `shell:startup`).
+
+**2. Find your Windows host IP from WSL:**
+
+```bash
+cat /etc/resolv.conf | grep nameserver | awk '{print $2}'
+```
+
+**3. Configure Claude Code in WSL:**
+
+Edit `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "delphi-build": {
+      "url": "http://<windows-host-ip>:8080/mcp"
+    }
+  }
+}
+```
+
+**Test connectivity:**
+
+```bash
+curl -X POST http://<windows-host-ip>:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{}, "clientInfo":{"name":"test","version":"1.0"},"protocolVersion":"2025-03-26"},"id":1}'
+```
+
+If you get a JSON response, the connection works. You can also run `test_http_transport.sh` (included in this repository).
+
+> **Firewall:** If the connection is refused, allow port 8080 in Windows Firewall:
+> ```powershell
+> netsh advfirewall firewall add rule name="Delphi MCP Server" dir=in action=allow protocol=TCP localport=8080
+> ```
 
 ## Step 4: Restart Claude Code
 
@@ -269,6 +306,8 @@ The MCP server handles these automatically - no configuration needed:
 - ✅ **80+ Library Support**: Handles projects with extensive dependencies
 - ✅ **Cross-Platform**: Supports Win32, Win64, and Linux64 compilation
 - ✅ **Multi-Config**: Generate platform-specific configs from multiple build logs (Debug/Release × platforms)
+- ✅ **Network Transport**: Streamable HTTP for remote access (WSL-Ubuntu, network clients)
+- ✅ **WSL Interop**: Use from WSL via stdio through Windows Python (no HTTP needed)
 
 ## Next Steps
 

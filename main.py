@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Delphi Build MCP Server - Main entry point."""
 
+import argparse
 import asyncio
+import contextlib
 import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
+from starlette.applications import Starlette
+from starlette.responses import Response
 
 from src.compiler import DelphiCompiler
 from src.config import ConfigLoader
@@ -351,11 +357,72 @@ async def handle_extend_config(arguments: dict) -> str:
     return json.dumps(result.model_dump(), indent=2)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Delphi Build MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http"],
+        default="stdio",
+        help="Transport type (default: stdio)",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host to bind to (default: 0.0.0.0, only used with streamable-http)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to listen on (default: 8080, only used with streamable-http)",
+    )
+    return parser.parse_args()
+
+
+async def run_streamable_http(host: str, port: int) -> None:
+    """Run the MCP server with Streamable HTTP transport."""
+    import uvicorn
+
+    session_manager = StreamableHTTPSessionManager(app=app)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(starlette_app: Starlette) -> AsyncIterator[None]:
+        async with session_manager.run():
+            yield
+
+    # Starlette handles lifespan only; /mcp routing is done at the ASGI level
+    # to avoid Starlette's endpoint wrapper which expects a Response return value.
+    # StreamableHTTPSessionManager.handle_request is a raw ASGI app that writes
+    # directly to the send callable.
+    starlette_app = Starlette(lifespan=lifespan)
+
+    async def asgi_app(scope, receive, send):
+        if scope["type"] == "http" and scope["path"] == "/mcp":
+            await session_manager.handle_request(scope, receive, send)
+        else:
+            await starlette_app(scope, receive, send)
+
+    config = uvicorn.Config(
+        asgi_app,
+        host=host,
+        port=port,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
 async def main():
     """Main entry point for the MCP server."""
-    # Run the server using stdio transport
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(read_stream, write_stream, app.create_initialization_options())
+    args = parse_args()
+
+    if args.transport == "streamable-http":
+        await run_streamable_http(args.host, args.port)
+    else:
+        # Run the server using stdio transport (default, unchanged behavior)
+        async with stdio_server() as (read_stream, write_stream):
+            await app.run(read_stream, write_stream, app.create_initialization_options())
 
 
 if __name__ == "__main__":

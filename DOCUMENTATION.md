@@ -119,7 +119,7 @@ pip install -e .
 ### Verify Installation
 
 ```bash
-uv run python main.py --version
+uv run main.py --version
 ```
 
 ---

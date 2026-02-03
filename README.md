@@ -16,6 +16,8 @@ A Model Context Protocol (MCP) server that enables AI coding agents like Claude 
 - **80+ Library Paths**: Successfully handles projects with extensive dependencies
 - **Environment Variables**: Auto-expands `${USERNAME}` in paths
 - **MCP Compatible**: Works with Claude Code, Cline, and other MCP clients
+- **Network Transport**: Streamable HTTP support for remote access (e.g., WSL-Ubuntu to Windows host)
+- **WSL Interop**: Use from WSL-Ubuntu via stdio through Windows Python or via Streamable HTTP
 
 ## Quick Start
 
@@ -116,8 +118,6 @@ print(result.message)
 
 Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
-**Using UV (Recommended):**
-
 ```json
 {
   "mcpServers": {
@@ -127,7 +127,6 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
         "run",
         "--directory",
         "C:\\path\\to\\delphi-build-mcp-server",
-        "python",
         "main.py"
       ],
       "env": {
@@ -138,21 +137,96 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 }
 ```
 
-**Or use direct Python path:**
+### Server Options
+
+The server supports two transport modes:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--transport` | `stdio` | Transport type: `stdio` or `streamable-http` |
+| `--host` | `0.0.0.0` | Bind address (streamable-http only) |
+| `--port` | `8080` | Listen port (streamable-http only) |
+
+**Local (stdio, default):**
+```bash
+uv run main.py
+```
+
+**Network (Streamable HTTP):**
+```bash
+uv run main.py --transport streamable-http
+# Server listens on http://0.0.0.0:8080/mcp
+```
+
+### Configure Claude Code in WSL-Ubuntu
+
+Two options for using the Delphi MCP server from WSL-Ubuntu:
+
+#### Option 1: stdio via WSL Interop (Simplest)
+
+WSL can execute Windows binaries directly. This uses stdio transport through the Windows Python -- no HTTP server needed, no manual start. Claude Code manages the server lifecycle automatically.
+
+Edit `~/.claude.json` (or project-level `.mcp.json`) in WSL:
 
 ```json
 {
   "mcpServers": {
     "delphi-build": {
-      "command": "C:\\path\\to\\delphi-build-mcp-server\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\delphi-build-mcp-server\\main.py"],
+      "command": "/mnt/c/Users/<username>/path/to/delphi-build-mcp-server/.venv/Scripts/python.exe",
+      "args": [
+        "/mnt/c/Users/<username>/path/to/delphi-build-mcp-server/main.py"
+      ],
       "env": {
-        "DELPHI_CONFIG": "C:\\path\\to\\delphi_config.toml"
+        "DELPHI_CONFIG": "C:\\Users\\<username>\\path\\to\\delphi_config.toml"
       }
     }
   }
 }
 ```
+
+> **Note:** The `DELPHI_CONFIG` path must use Windows-style paths since the server runs as a Windows process.
+
+#### Option 2: Streamable HTTP (Network Transport)
+
+Run the MCP server as a persistent HTTP service on Windows and connect from WSL over the network.
+
+**1. Start the MCP server on Windows:**
+
+```bash
+cd C:\path\to\delphi-build-mcp-server
+uv run main.py --transport streamable-http
+```
+
+To start the server automatically at logon, place `start_mcp_server.bat` (included in this repository) in your Windows Startup folder (`Win+R` → `shell:startup`).
+
+**2. Find your Windows host IP from WSL:**
+
+```bash
+# Method 1: WSL gateway IP
+cat /etc/resolv.conf | grep nameserver | awk '{print $2}'
+
+# Method 2: Windows hostname
+hostname -I  # run on Windows side
+```
+
+**3. Configure Claude Code in WSL:**
+
+Edit `~/.claude.json` (or project-level `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "delphi-build": {
+      "url": "http://<windows-host-ip>:8080/mcp"
+    }
+  }
+}
+```
+
+> **Note:** If the connection is refused, you may need to allow port 8080 through Windows Firewall:
+> ```powershell
+> netsh advfirewall firewall add rule name="Delphi MCP Server" dir=in action=allow protocol=TCP localport=8080
+> ```
 
 ### 4. Use in Claude Code
 
@@ -241,7 +315,7 @@ Extend an existing `delphi_config.toml` with settings from a new IDE build log. 
 
 ```
 delphi-build-mcp-server/
-|-- main.py                       # MCP server entry point
+|-- main.py                       # MCP server entry point (stdio + streamable-http)
 |-- src/
 |   |-- models.py                 # Pydantic data models
 |   |-- buildlog_parser.py        # Parse IDE build logs
@@ -253,6 +327,10 @@ delphi-build-mcp-server/
 |   |-- config_extender.py        # Extend existing TOML configs
 |   +-- compiler.py               # Compiler orchestration
 |-- tests/                        # Unit tests
+|-- start_mcp_server.bat          # Auto-start script for Windows (shell:startup)
+|-- test_stdio_wsl.sh             # Test stdio transport from WSL
+|-- test_http_transport.sh        # Test Streamable HTTP transport (bash)
+|-- test_http_transport.bat       # Test Streamable HTTP transport (Windows)
 |-- delphi_config.toml.template   # Configuration template
 |-- pyproject.toml                # Python project config
 |-- QUICKSTART.md                 # Quick start guide

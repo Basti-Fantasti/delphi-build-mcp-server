@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-02
+
+### Added
+
+- **Streamable HTTP Transport**: New `--transport streamable-http` CLI option for network access
+  - Enables remote MCP clients (e.g., Claude Code in WSL-Ubuntu) to connect over TCP/IP
+  - Endpoint: `http://<host>:<port>/mcp`
+  - Default bind: `0.0.0.0:8080`
+  - CLI flags: `--transport`, `--host`, `--port`
+  - Uses MCP SDK's `StreamableHTTPSessionManager` with stateful sessions
+  - No new dependencies (uvicorn, starlette already included in MCP SDK)
+- **WSL Interop Support**: Use the Delphi MCP server from WSL-Ubuntu via stdio through the Windows Python binary
+  - No HTTP server needed -- Claude Code manages the server lifecycle automatically
+  - Verified end-to-end: WSL bash -> Windows Python -> MCP server -> Delphi compiler -> compiled .exe
+- **Server CLI Options**: `--transport`, `--host`, `--port` command-line arguments
+  - Default transport remains `stdio` (no breaking changes)
+- **Auto-Start Script**: `start_mcp_server.bat` for launching the HTTP server at Windows logon
+  - Place in Windows Startup folder (`shell:startup`) for automatic start
+  - Starts minimized, configurable host/port
+- **Test Scripts**: Scripts for verifying both transport modes
+  - `test_stdio_wsl.sh` -- test stdio transport from WSL via Windows Python
+  - `test_http_transport.sh` -- test Streamable HTTP transport (bash)
+  - `test_http_transport.bat` -- test Streamable HTTP transport (Windows)
+- **WSL-Ubuntu Documentation**: Setup guide with two options (stdio interop and Streamable HTTP)
+
 ## [1.5.0] - 2026-01-22
 
 ### Added
