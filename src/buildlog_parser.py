@@ -77,12 +77,15 @@ class BuildLogParser:
         # Collect the compiler command and all continuation lines
         # Continuation lines are indented with spaces, BUT we must stop when we
         # encounter compiler output (warnings, errors, or hints).
-        # Compiler output lines look like:
-        #   - "path\file.pas(line,col): warning W1234: message"
-        #   - "path\file.pas(line,col): error E1234: message"
-        #   - "path\file.pas(line,col): hint H1234: message"
+        # English format: "path\file.pas(line,col): warning W1234: message"
+        # German format:  "[dcc32/dcc64/dcclinux64 Warnung] file.pas(line): W1047 message"
         compiler_output_pattern = re.compile(
-            r"^\s+\S+\.\w+\(\d+,\d+\):\s*(warning|error|hint|fatal)\s+[A-Z]\d+:",
+            r"^\s+("
+            r"\S+\.\w+\(\d+(?:,\d+)?\):\s*(?:warning|error|hint|fatal)\s+[A-Z]\d+"
+            r"|"
+            r"\[dcc(?:32|64|linux64)\s+(?:Warnung|Hinweis|Fehler|Fataler Fehler"
+            r"|Warning|Hint|Error|Fatal Error)\]"
+            r")",
             re.IGNORECASE
         )
 

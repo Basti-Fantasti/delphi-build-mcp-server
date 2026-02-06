@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-06
+
+### Added
+
+- **WSL Path Conversion**: Automatic conversion of WSL-style paths (`/mnt/<drive>/...`) to Windows paths when the MCP server runs as a Windows process
+  - New `src/path_utils.py` module with `convert_wsl_to_windows_path()` function
+  - Applied to all path inputs across all 4 MCP tools (compile, generate config, multi-config, extend config)
+  - Supports `win32` and `win64` platform detection
+  - No-op on non-Windows platforms (safe for native Linux usage)
+
+### Fixed
+
+- **Platform-Specific Config Loading**: Fixed `ConfigLoader` not finding platform-specific config files (e.g., `delphi_config_win64.toml`)
+  - Root cause: config was loaded before `.dproj` parsing determined the platform, so `ConfigLoader` was always created without a platform parameter
+  - Fix: reordered `compile_project()` to parse `.dproj` first, then create `ConfigLoader(platform=...)` with the correct platform
+
+- **Build Log Parser - German Warning Detection**: Fixed build log parser including German compiler warnings/hints as part of the compiler command
+  - Root cause: `compiler_output_pattern` only matched English format (`file.pas(line,col): warning W1234:`)
+  - German format (`[dcc32/dcc64/dcclinux64 Warnung] file.pas(line): W1047 message`) was not detected, causing warning text to be parsed as library paths and generating invalid TOML keys
+  - Fix: extended regex to match both English and German bracketed output formats for all compiler variants (dcc32, dcc64, dcclinux64)
+
 ## [1.6.0] - 2026-02-02
 
 ### Added

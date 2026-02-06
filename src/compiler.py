@@ -57,11 +57,7 @@ class DelphiCompiler:
         if project_path.suffix.lower() not in [".dpr", ".dpk", ".dproj"]:
             raise ValueError(f"Invalid project file: {project_path}. Expected .dpr, .dpk, or .dproj")
 
-        # Load configuration
-        if not self.config:
-            self.config = self.config_loader.load()
-
-        # Parse .dproj file if it exists
+        # Parse .dproj file first to determine platform before loading config
         dproj_path = self._get_dproj_path(project_path)
         dproj_settings = None
 
@@ -72,6 +68,11 @@ class DelphiCompiler:
         else:
             # No .dproj, use override or default to Win32
             platform = override_platform or "Win32"
+
+        # Load configuration with platform so the correct config file is found
+        if not self.config:
+            self.config_loader = ConfigLoader(platform=platform)
+            self.config = self.config_loader.load()
 
         # Get the actual source file to compile (.dpr or .dpk, not .dproj)
         source_path = self._get_source_path(project_path, dproj_settings)

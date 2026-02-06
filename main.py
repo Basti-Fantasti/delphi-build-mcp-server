@@ -21,6 +21,7 @@ from src.config import ConfigLoader
 from src.config_generator import ConfigGenerator
 from src.config_extender import ConfigExtender
 from src.multi_config_generator import MultiConfigGenerator
+from src.path_utils import convert_wsl_to_windows_path
 
 
 # Create MCP server instance
@@ -232,8 +233,8 @@ async def handle_compile_project(arguments: dict) -> str:
     """
     import json
 
-    # Extract arguments
-    project_path = Path(arguments["project_path"])
+    # Extract arguments (convert WSL paths when running on Windows)
+    project_path = Path(convert_wsl_to_windows_path(arguments["project_path"]))
     force_build_all = arguments.get("force_build_all", False)
     override_config = arguments.get("override_config")
     override_platform = arguments.get("override_platform")
@@ -268,10 +269,10 @@ async def handle_generate_config(arguments: dict) -> str:
     """
     import json
 
-    # Extract arguments
-    build_log_path = Path(arguments["build_log_path"])
+    # Extract arguments (convert WSL paths when running on Windows)
+    build_log_path = Path(convert_wsl_to_windows_path(arguments["build_log_path"]))
     output_config_path_str = arguments.get("output_config_path")
-    output_config_path = Path(output_config_path_str) if output_config_path_str else None
+    output_config_path = Path(convert_wsl_to_windows_path(output_config_path_str)) if output_config_path_str else None
     use_platform_specific_name = arguments.get("use_platform_specific_name", True)
     use_env_vars = arguments.get("use_env_vars", True)
 
@@ -300,13 +301,13 @@ async def handle_generate_multi_config(arguments: dict) -> str:
     """
     import json
 
-    # Extract arguments
-    build_log_paths = arguments["build_log_paths"]
+    # Extract arguments (convert WSL paths when running on Windows)
+    build_log_paths = [convert_wsl_to_windows_path(p) for p in arguments["build_log_paths"]]
     output_config_path_str = arguments.get("output_config_path")
-    output_config_path = Path(output_config_path_str) if output_config_path_str else None
+    output_config_path = Path(convert_wsl_to_windows_path(output_config_path_str)) if output_config_path_str else None
     generate_separate_files = arguments.get("generate_separate_files", True)
     output_dir_str = arguments.get("output_dir", ".")
-    output_dir = Path(output_dir_str)
+    output_dir = Path(convert_wsl_to_windows_path(output_dir_str))
     use_env_vars = arguments.get("use_env_vars", True)
 
     # Initialize generator
@@ -335,12 +336,12 @@ async def handle_extend_config(arguments: dict) -> str:
     """
     import json
 
-    # Extract arguments
-    existing_config_path = Path(arguments["existing_config_path"])
-    build_log_path = Path(arguments["build_log_path"])
+    # Extract arguments (convert WSL paths when running on Windows)
+    existing_config_path = Path(convert_wsl_to_windows_path(arguments["existing_config_path"]))
+    build_log_path = Path(convert_wsl_to_windows_path(arguments["build_log_path"]))
     output_config_path = arguments.get("output_config_path")
     if output_config_path:
-        output_config_path = Path(output_config_path)
+        output_config_path = Path(convert_wsl_to_windows_path(output_config_path))
     use_env_vars = arguments.get("use_env_vars", True)
 
     # Initialize extender
