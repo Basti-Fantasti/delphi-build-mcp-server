@@ -326,3 +326,34 @@ class BuildLogInfo(BaseModel):
     def convert_search_paths(cls, v: list[str | Path]) -> list[Path]:
         """Convert search paths to Path objects."""
         return [Path(p) if isinstance(p, str) else p for p in v]
+
+
+class VersionInfo(BaseModel):
+    """Version information extracted from .dproj for resource compilation."""
+
+    major: int = Field(default=0, description="Major version number")
+    minor: int = Field(default=0, description="Minor version number")
+    release: int = Field(default=0, description="Release version number")
+    build: int = Field(default=0, description="Build version number")
+    locale: int = Field(default=1033, description="Locale ID (default: 1033 = US English)")
+    keys: dict[str, str] = Field(
+        default_factory=dict,
+        description="Version info key-value pairs (CompanyName, FileDescription, etc.)",
+    )
+
+    @property
+    def file_version_string(self) -> str:
+        """Return version as dotted string (e.g., '1.2.3.4')."""
+        return f"{self.major}.{self.minor}.{self.release}.{self.build}"
+
+
+class ResourceCompilationResult(BaseModel):
+    """Result of resource compilation step."""
+
+    success: bool = Field(description="Whether resource compilation succeeded")
+    res_file: Optional[str] = Field(
+        default=None, description="Path to generated .res file if successful"
+    )
+    error_output: Optional[str] = Field(
+        default=None, description="Error output from resource compiler"
+    )
