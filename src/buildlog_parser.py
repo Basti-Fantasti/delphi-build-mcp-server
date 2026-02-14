@@ -42,8 +42,11 @@ class BuildLogParser:
             ValueError: If compiler command cannot be found in log
         """
         self._read_log_file()
+        resource_compiler_path = self._extract_resource_compiler_path()
         compiler_command = self._extract_compiler_command()
-        return self._parse_compiler_command(compiler_command)
+        info = self._parse_compiler_command(compiler_command)
+        info.resource_compiler_path = resource_compiler_path
+        return info
 
     def _read_log_file(self) -> None:
         """Read the build log file content."""
@@ -52,6 +55,19 @@ class BuildLogParser:
 
         with open(self.build_log_path, "r", encoding="utf-8", errors="replace") as f:
             self.log_content = f.read()
+
+    def _extract_resource_compiler_path(self) -> Path | None:
+        """Extract cgrc.exe path from the build log.
+
+        Returns:
+            Path to cgrc.exe or None if not found
+        """
+        match = re.search(
+            r"([a-z]:\\[^\r\n]+?\\cgrc\.exe)", self.log_content, re.IGNORECASE
+        )
+        if match:
+            return Path(match.group(1))
+        return None
 
     def _extract_compiler_command(self) -> str:
         """Extract the complete compiler command from the log.

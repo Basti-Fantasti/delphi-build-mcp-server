@@ -315,8 +315,11 @@ class BuildLogInfo(BaseModel):
     sdk_libpaths: list[Path] = Field(
         default_factory=list, description="Linux SDK library paths (--libpath)"
     )
+    resource_compiler_path: Optional[Path] = Field(
+        default=None, description="Path to resource compiler (cgrc.exe)"
+    )
 
-    @field_validator("compiler_path", "sdk_sysroot", mode="before")
+    @field_validator("compiler_path", "sdk_sysroot", "resource_compiler_path", mode="before")
     @classmethod
     def convert_compiler_path(cls, v: str | Path | None) -> Path | None:
         """Convert compiler path to Path object."""
