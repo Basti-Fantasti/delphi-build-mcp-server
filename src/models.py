@@ -257,6 +257,9 @@ class DProjSettings(BaseModel):
     namespace_prefixes: list[str] = Field(
         default_factory=list, description="Namespace prefixes from project"
     )
+    version_info: Optional["VersionInfo"] = Field(
+        default=None, description="Version information for resource compilation"
+    )
 
     @field_validator(
         "unit_search_paths", "include_paths", "resource_paths", "output_dir", "dcu_output_dir",

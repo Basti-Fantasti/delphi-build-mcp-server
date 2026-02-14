@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
-from src.models import DProjSettings
+from src.models import DProjSettings, VersionInfo
 
 
 class DProjParser:
@@ -147,6 +147,15 @@ class DProjParser:
 
         settings = DProjSettings(active_config=config, active_platform=platform, main_source=main_source)
 
+        # Initialize version info tracking fields
+        self._verinfo_include = None
+        self._verinfo_keys_raw = None
+        self._verinfo_major = None
+        self._verinfo_minor = None
+        self._verinfo_release = None
+        self._verinfo_build = None
+        self._verinfo_locale = None
+
         # Build a map from config/platform names to their internal Cfg keys
         config_key_map = self._build_config_key_map()
 
@@ -196,6 +205,9 @@ class DProjParser:
         # Process each PropertyGroup and merge settings
         for prop_group in property_groups:
             self._process_property_group(prop_group, settings)
+
+        # Build version info from collected VerInfo properties
+        settings.version_info = self._build_version_info()
 
         return settings
 
@@ -271,11 +283,87 @@ class DProjParser:
                     if ns not in settings.namespace_prefixes:
                         settings.namespace_prefixes.append(ns)
 
+            # Handle version info properties
+            elif tag_name == "VerInfo_IncludeVerInfo":
+                self._verinfo_include = value.lower() == "true"
+            elif tag_name == "VerInfo_Keys":
+                self._verinfo_keys_raw = value
+            elif tag_name == "VerInfo_MajorVer":
+                self._verinfo_major = int(value) if value.isdigit() else None
+            elif tag_name == "VerInfo_MinorVer":
+                self._verinfo_minor = int(value) if value.isdigit() else None
+            elif tag_name == "VerInfo_Release":
+                self._verinfo_release = int(value) if value.isdigit() else None
+            elif tag_name == "VerInfo_Build":
+                self._verinfo_build = int(value) if value.isdigit() else None
+            elif tag_name == "VerInfo_Locale":
+                self._verinfo_locale = int(value) if value.isdigit() else None
+
             # Handle compiler flags
             elif tag_name in self.DCC_FLAG_MAPPING:
                 flag = self.DCC_FLAG_MAPPING[tag_name](value.lower())
                 if flag not in settings.compiler_flags:
                     settings.compiler_flags.append(flag)
+
+    def _build_version_info(self) -> Optional[VersionInfo]:
+        """Build VersionInfo from collected VerInfo properties.
+
+        Returns:
+            VersionInfo or None if version info is disabled or absent
+        """
+        # If explicitly disabled
+        if self._verinfo_include is False:
+            return None
+
+        # If no VerInfo_Keys, no version info defined
+        if not self._verinfo_keys_raw:
+            return None
+
+        # Parse VerInfo_Keys: "CompanyName=TestCo;FileDescription=App;..."
+        keys = {}
+        for entry in self._verinfo_keys_raw.split(";"):
+            if "=" in entry:
+                key, _, val = entry.partition("=")
+                key = key.strip()
+                val = val.strip()
+                # Resolve $(MSBuildProjectName) to project file stem
+                val = val.replace("$(MSBuildProjectName)", self.dproj_path.stem)
+                if key:
+                    keys[key] = val
+
+        # Extract version from FileVersion key
+        major, minor, release, build = 0, 0, 0, 0
+        file_version = keys.get("FileVersion", "0.0.0.0")
+        parts = file_version.split(".")
+        if len(parts) >= 1:
+            major = int(parts[0]) if parts[0].isdigit() else 0
+        if len(parts) >= 2:
+            minor = int(parts[1]) if parts[1].isdigit() else 0
+        if len(parts) >= 3:
+            release = int(parts[2]) if parts[2].isdigit() else 0
+        if len(parts) >= 4:
+            build = int(parts[3]) if parts[3].isdigit() else 0
+
+        # Individual VerInfo_* properties override FileVersion values
+        if self._verinfo_major is not None:
+            major = self._verinfo_major
+        if self._verinfo_minor is not None:
+            minor = self._verinfo_minor
+        if self._verinfo_release is not None:
+            release = self._verinfo_release
+        if self._verinfo_build is not None:
+            build = self._verinfo_build
+
+        locale = self._verinfo_locale if self._verinfo_locale is not None else 1033
+
+        return VersionInfo(
+            major=major,
+            minor=minor,
+            release=release,
+            build=build,
+            locale=locale,
+            keys=keys,
+        )
 
     def _parse_semicolon_list(self, value: str) -> list[str]:
         """Parse a semicolon-separated list.
