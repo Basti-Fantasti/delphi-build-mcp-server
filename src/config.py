@@ -395,3 +395,14 @@ class ConfigLoader:
             raise ValueError("Configuration not loaded")
 
         return self.config.linux_sdk.libpaths
+
+    def get_resource_compiler_path(self) -> Path:
+        """Get the resource compiler (cgrc.exe) path.
+
+        Returns:
+            Path to cgrc.exe
+        """
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+
+        return self.config.delphi.root_path / "bin" / "cgrc.exe"

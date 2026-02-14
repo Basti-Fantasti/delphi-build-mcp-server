@@ -8,8 +8,9 @@ from typing import Optional
 
 from src.config import ConfigLoader
 from src.dproj_parser import DProjParser
-from src.models import CompilationResult, CompilationStatistics
+from src.models import CompilationError, CompilationResult, CompilationStatistics
 from src.output_parser import OutputParser
+from src.resource_compiler import ResourceCompiler
 
 
 class DelphiCompiler:
@@ -79,6 +80,29 @@ class DelphiCompiler:
         if not source_path.exists():
             raise FileNotFoundError(f"Delphi project source file not found: {source_path}")
 
+        # Resource compilation step (before dcc)
+        start_time = time.time()
+        if dproj_settings and dproj_settings.version_info:
+            rc = ResourceCompiler(self.config.delphi.root_path)
+            rc_result = rc.compile_version_resource(
+                project_name=source_path.stem,
+                project_dir=source_path.parent,
+                version_info=dproj_settings.version_info,
+            )
+            if not rc_result.success:
+                return CompilationResult(
+                    success=False,
+                    exit_code=1,
+                    errors=[CompilationError(
+                        file=f"{source_path.stem}.vrc",
+                        line=0,
+                        column=0,
+                        message=rc_result.error_output or "Resource compilation failed",
+                        error_code=None,
+                    )],
+                    compilation_time_seconds=round(time.time() - start_time, 2),
+                )
+
         # Build compiler command
         compiler_path = self.config_loader.get_compiler_path(platform)
         command = self._build_command(
@@ -92,7 +116,6 @@ class DelphiCompiler:
         )
 
         # Execute compilation
-        start_time = time.time()
         output, exit_code = self._execute_compiler(command, source_path.parent)
         compilation_time = time.time() - start_time
 
