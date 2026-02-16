@@ -205,10 +205,11 @@ class DelphiCompiler:
 
         # Add compiler flags from config file (extracted from build log)
         # These include essential flags like --no-config, -$O-, -$W+, etc.
+        # Skip flags handled elsewhere: -B/-Q (added below), --syslibroot/--libpath (Linux SDK section)
+        skip_flags = {"-B", "-Q", "--syslibroot", "--libpath"}
         config_flags = self.config.compiler.flags.get("flags", [])
         for flag in config_flags:
-            # Skip -B and -Q as we handle them separately
-            if flag not in ["-B", "-Q"]:
+            if flag not in skip_flags:
                 command.append(flag)
 
         # Add compiler flags from .dproj (like -$O-, -$R+, etc.)

@@ -357,11 +357,16 @@ class BuildLogParser:
 
         # Skip prefixes that are handled elsewhere
         skip_prefixes = ["-U", "-I", "-R", "-O", "-NS", "-A", "-D", "-E", "-LE", "-LN", "-NU", "-NB", "-NH", "-NO"]
+        # Long flags handled separately (Linux SDK options extracted by dedicated methods)
+        skip_long_flags = ["--syslibroot", "--libpath"]
 
         for pattern in flag_patterns:
             matches = re.finditer(pattern, command, re.IGNORECASE)
             for match in matches:
                 flag = match.group(1)
+                # Skip long flags handled elsewhere (e.g., Linux SDK options)
+                if flag.lower() in skip_long_flags:
+                    continue
                 # Skip flags we've already processed elsewhere
                 if not any(flag.upper().startswith(prefix) for prefix in skip_prefixes):
                     if flag not in flags:

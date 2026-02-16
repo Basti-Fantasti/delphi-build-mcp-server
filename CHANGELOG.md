@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-16
+
+### Added
+
+- **Version Resource Compilation**: Automatic `.res` file generation from `.dproj` version info before compilation
+  - New `VersionInfo` model extracts version numbers, locale, and key-value pairs (CompanyName, FileDescription, etc.) from `.dproj` files
+  - New `ResourceCompiler` class generates `.vrc` files and compiles them to `.res` using `cgrc.exe`
+  - New `ResourceCompilationResult` model for tracking resource compilation outcome
+  - Integrated as automatic pre-compilation step in `compile_project()` - runs before `dcc` when version info is present
+  - Extracts `cgrc.exe` path from IDE build logs (German and English formats)
+  - Supports MSBuild variable substitution in version info keys (`$(MSBuildProjectName)`, etc.)
+  - 15 new tests covering VRC generation, resource compilation, and build log extraction
+
+### Fixed
+
+- **Linux64 Compilation Failure**: Fixed `F1030: Ungültige Compileranweisung: '--syslibroot'` when compiling for Linux64 platform
+  - Root cause: build log parser's `_extract_compiler_flags()` captured `--syslibroot` and `--libpath` as generic compiler flags (the long flag regex matched them, but the skip list only had single-dash flags)
+  - These were then written to `[compiler.flags]` in config as bare strings and passed to the compiler without their required `:path` values, before the correct `--syslibroot:{path}` was added from `[linux_sdk]`
+  - Fix: added `--syslibroot` and `--libpath` to `skip_long_flags` in build log parser
+  - Defense-in-depth: added same flags to `skip_flags` in `compiler.py`'s `_build_command()` to protect against stale config files
+  - Regenerated `delphi_config_linux64.toml` without the offending bare flags
+  - 6 new tests verifying Linux64-specific flag extraction
+
 ## [1.7.0] - 2026-02-06
 
 ### Added
