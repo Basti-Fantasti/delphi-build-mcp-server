@@ -355,12 +355,12 @@ class BuildLogInfo(BaseModel):
     compiler_flags: list[str] = Field(
         default_factory=list, description="Additional compiler flags"
     )
-    # Linux64 SDK fields
+    # Cross-compilation SDK fields
     sdk_sysroot: Optional[Path] = Field(
         default=None, description="Linux SDK sysroot path (--syslibroot)"
     )
     sdk_libpaths: list[Path] = Field(
-        default_factory=list, description="Linux SDK library paths (--libpath)"
+        default_factory=list, description="SDK library paths for Linux64/Android (--libpath)"
     )
     resource_compiler_path: Optional[Path] = Field(
         default=None, description="Path to resource compiler (cgrc.exe)"

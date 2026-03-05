@@ -14,12 +14,18 @@ class BuildLogParser:
         r"dcc32\.exe\s+(.+)",  # Win32 compiler
         r"dcc64\.exe\s+(.+)",  # Win64 compiler
         r"dcclinux64\.exe\s+(.+)",  # Linux64 cross-compiler
+        r"dccaarm\.exe\s+(.+)",  # Android 32-bit compiler
+        r"dccaarm64\.exe\s+(.+)",  # Android 64-bit compiler
         r"dcc32\s+Befehlszeile",  # German: command line
         r"dcc32\s+command\s+line",  # English: command line
         r"dcc64\s+Befehlszeile",  # German: command line
         r"dcc64\s+command\s+line",  # English: command line
         r"dcclinux64\s+Befehlszeile",  # German: command line
         r"dcclinux64\s+command\s+line",  # English: command line
+        r"dccaarm\s+Befehlszeile",  # German: command line
+        r"dccaarm\s+command\s+line",  # English: command line
+        r"dccaarm64\s+Befehlszeile",  # German: command line
+        r"dccaarm64\s+command\s+line",  # English: command line
     ]
 
     def __init__(self, build_log_path: Path):
@@ -83,7 +89,7 @@ class BuildLogParser:
         # Find the line with compiler path
         compiler_line_idx = None
         for idx, line in enumerate(lines):
-            if re.search(r"dcc32\.exe|dcc64\.exe|dcclinux64\.exe", line, re.IGNORECASE):
+            if re.search(r"dcc32\.exe|dcc64\.exe|dcclinux64\.exe|dccaarm\.exe|dccaarm64\.exe", line, re.IGNORECASE):
                 compiler_line_idx = idx
                 break
 
@@ -99,7 +105,7 @@ class BuildLogParser:
             r"^\s+("
             r"\S+\.\w+\(\d+(?:,\d+)?\):\s*(?:warning|error|hint|fatal)\s+[A-Z]\d+"
             r"|"
-            r"\[dcc(?:32|64|linux64)\s+(?:Warnung|Hinweis|Fehler|Fataler Fehler"
+            r"\[dcc(?:32|64|linux64|aarm|aarm64)\s+(?:Warnung|Hinweis|Fehler|Fataler Fehler"
             r"|Warning|Hint|Error|Fatal Error)\]"
             r")",
             re.IGNORECASE
@@ -136,14 +142,18 @@ class BuildLogParser:
         """
         # Detect compiler path and platform
         compiler_match = re.search(
-            r"([a-z]:\\[^\"]+\\dcc(?:32|64|linux64)\.exe)", command, re.IGNORECASE
+            r"([a-z]:\\[^\"]+\\dcc(?:32|64|linux64|aarm64|aarm)\.exe)", command, re.IGNORECASE
         )
         if not compiler_match:
             raise ValueError("Could not extract compiler path from command")
 
         compiler_path = Path(compiler_match.group(1))
         compiler_name = compiler_path.name.lower()
-        if "dcclinux64" in compiler_name:
+        if "dccaarm64" in compiler_name:
+            platform = Platform.ANDROID64
+        elif "dccaarm" in compiler_name:
+            platform = Platform.ANDROID
+        elif "dcclinux64" in compiler_name:
             platform = Platform.LINUX64
         elif "dcc32" in compiler_name:
             platform = Platform.WIN32
@@ -185,6 +195,14 @@ class BuildLogParser:
             # Prepend Delphi lib paths (they should come before SDK paths)
             sdk_libpaths = delphi_lib_paths + sdk_libpaths
 
+        # Extract Android SDK options (only for Android builds)
+        android_compiler_rt = None
+        android_linker = None
+        if platform in (Platform.ANDROID, Platform.ANDROID64):
+            android_compiler_rt = self._extract_android_compiler_rt(command)
+            android_linker = self._extract_android_linker(command)
+            sdk_libpaths = self._extract_sdk_libpaths(command)
+
         return BuildLogInfo(
             compiler_path=compiler_path,
             delphi_version=delphi_version,
@@ -196,6 +214,8 @@ class BuildLogParser:
             compiler_flags=compiler_flags,
             sdk_sysroot=sdk_sysroot,
             sdk_libpaths=sdk_libpaths,
+            android_compiler_rt=android_compiler_rt,
+            android_linker=android_linker,
         )
 
     def _extract_search_paths(self, command: str) -> list[Path]:
@@ -358,7 +378,7 @@ class BuildLogParser:
         # Skip prefixes that are handled elsewhere
         skip_prefixes = ["-U", "-I", "-R", "-O", "-NS", "-A", "-D", "-E", "-LE", "-LN", "-NU", "-NB", "-NH", "-NO"]
         # Long flags handled separately (Linux SDK options extracted by dedicated methods)
-        skip_long_flags = ["--syslibroot", "--libpath"]
+        skip_long_flags = ["--syslibroot", "--libpath", "--compiler-rt", "--linker"]
 
         for pattern in flag_patterns:
             matches = re.finditer(pattern, command, re.IGNORECASE)
@@ -393,8 +413,24 @@ class BuildLogParser:
         sysroot_path = match.group(1).strip()
         return Path(sysroot_path) if sysroot_path else None
 
+    def _extract_android_compiler_rt(self, command: str) -> Path | None:
+        """Extract --compiler-rt path from Android build command."""
+        pattern = r"--compiler-rt:([^\s]+)"
+        match = re.search(pattern, command, re.IGNORECASE)
+        if not match:
+            return None
+        return Path(match.group(1).strip())
+
+    def _extract_android_linker(self, command: str) -> Path | None:
+        """Extract --linker path from Android build command."""
+        pattern = r"--linker:([^\s]+)"
+        match = re.search(pattern, command, re.IGNORECASE)
+        if not match:
+            return None
+        return Path(match.group(1).strip())
+
     def _extract_sdk_libpaths(self, command: str) -> list[Path]:
-        """Extract Linux SDK library paths from --libpath flag.
+        """Extract SDK library paths from --libpath flag (Linux64 and Android).
 
         Args:
             command: The compiler command line
