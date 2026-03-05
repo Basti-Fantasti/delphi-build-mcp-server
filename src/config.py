@@ -11,7 +11,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from src.models import Config, CompilerConfig, DelphiConfig, LinuxSDKConfig, PathsConfig, SystemPaths
+from src.models import Config, CompilerConfig, DelphiConfig, LinuxSDKConfig, AndroidSDKConfig, PathsConfig, SystemPaths
 
 
 # Platform-specific config file naming
@@ -241,11 +241,20 @@ class ConfigLoader:
             libpaths=linux_sdk_raw.get("libpaths", []),
         )
 
+        # Parse Android SDK configuration (optional)
+        android_sdk_raw = raw_config.get("android_sdk", {})
+        android_sdk_config = AndroidSDKConfig(
+            compiler_rt=android_sdk_raw.get("compiler_rt"),
+            libpaths=android_sdk_raw.get("libpaths", []),
+            linker=android_sdk_raw.get("linker"),
+        )
+
         return Config(
             delphi=delphi_config,
             paths=paths_config,
             compiler=compiler_config,
             linux_sdk=linux_sdk_config,
+            android_sdk=android_sdk_config,
         )
 
     def _validate_config(self) -> None:
@@ -332,6 +341,16 @@ class ConfigLoader:
                 return self.config.delphi.compiler_linux64
             return self.config.delphi.root_path / "bin" / "dcclinux64.exe"
 
+        elif platform == "Android":
+            if self.config.delphi.compiler_android:
+                return self.config.delphi.compiler_android
+            return self.config.delphi.root_path / "bin" / "dccaarm.exe"
+
+        elif platform == "Android64":
+            if self.config.delphi.compiler_android64:
+                return self.config.delphi.compiler_android64
+            return self.config.delphi.root_path / "bin" / "dccaarm64.exe"
+
         else:
             raise ValueError(f"Unknown platform: {platform}")
 
@@ -373,6 +392,16 @@ class ConfigLoader:
                 paths.append(system.lib_linux64_release)
             if system.lib_linux64_debug:
                 paths.append(system.lib_linux64_debug)
+        elif platform == "Android":
+            if system.lib_android_release:
+                paths.append(system.lib_android_release)
+            if system.lib_android_debug:
+                paths.append(system.lib_android_debug)
+        elif platform == "Android64":
+            if system.lib_android64_release:
+                paths.append(system.lib_android64_release)
+            if system.lib_android64_debug:
+                paths.append(system.lib_android64_debug)
 
         # Add library paths
         paths.extend(self.config.paths.libraries.values())
@@ -400,6 +429,24 @@ class ConfigLoader:
             raise ValueError("Configuration not loaded")
 
         return self.config.linux_sdk.libpaths
+
+    def get_android_sdk_compiler_rt(self) -> Path | None:
+        """Get the Android NDK compiler-rt library path."""
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+        return self.config.android_sdk.compiler_rt
+
+    def get_android_sdk_libpaths(self) -> list[Path]:
+        """Get the Android NDK library paths."""
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+        return self.config.android_sdk.libpaths
+
+    def get_android_sdk_linker(self) -> Path | None:
+        """Get the Android NDK linker path."""
+        if not self.config:
+            raise ValueError("Configuration not loaded")
+        return self.config.android_sdk.linker
 
     def get_resource_compiler_path(self) -> Path:
         """Get the resource compiler (cgrc.exe) path.
