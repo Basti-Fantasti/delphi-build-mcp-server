@@ -24,9 +24,6 @@ PLATFORM_CONFIG_NAMES = {
     "Android64": "delphi_config_android64.toml",
 }
 
-DEFAULT_CONFIG_NAME = "delphi_config.toml"
-
-
 def get_platform_config_filename(platform: str) -> str:
     """Get the platform-specific config filename.
 
@@ -53,18 +50,18 @@ def find_config_file_for_platform(
     Search order:
     1. DELPHI_CONFIG environment variable (explicit override)
     2. Platform-specific config (e.g., delphi_config_win64.toml)
-    3. Generic config (delphi_config.toml)
 
     Args:
-        platform: Target platform (optional). If provided, searches for
-            platform-specific config first.
+        platform: Target platform (required unless DELPHI_CONFIG is set).
         base_dir: Base directory to search in (defaults to MCP server directory)
 
     Returns:
         Tuple of (config_path, source) where source describes how file was found:
         - "env" if from DELPHI_CONFIG
         - "platform" if platform-specific file found
-        - "generic" if fallback to delphi_config.toml
+
+    Raises:
+        FileNotFoundError: If no platform specified or platform-specific config not found
     """
     # Check environment variable for explicit override
     env_path = os.getenv("DELPHI_CONFIG")
@@ -76,16 +73,26 @@ def find_config_file_for_platform(
         # Use MCP server directory (parent of src/)
         base_dir = Path(__file__).parent.parent
 
-    # Search for platform-specific config if platform is provided
-    if platform:
-        platform_filename = get_platform_config_filename(platform)
-        platform_config_path = base_dir / platform_filename
-        if platform_config_path.exists():
-            return platform_config_path, "platform"
+    # Platform is required when no DELPHI_CONFIG override
+    if not platform:
+        raise FileNotFoundError(
+            "A platform must be specified to locate the config file. "
+            "Set the DELPHI_CONFIG environment variable or provide a platform "
+            "(e.g., Win32, Win64, Win64x, Linux64, Android, Android64)."
+        )
 
-    # Fallback to generic config
-    generic_path = base_dir / DEFAULT_CONFIG_NAME
-    return generic_path, "generic"
+    # Search for platform-specific config
+    platform_filename = get_platform_config_filename(platform)
+    platform_config_path = base_dir / platform_filename
+    if platform_config_path.exists():
+        return platform_config_path, "platform"
+
+    raise FileNotFoundError(
+        f"Platform-specific config file not found: {platform_filename}\n"
+        f"Expected location: {platform_config_path}\n"
+        "Generate it from a build log using the generate_config_from_build_log tool, "
+        "or set the DELPHI_CONFIG environment variable."
+    )
 
 
 class ConfigLoader:
@@ -101,7 +108,7 @@ class ConfigLoader:
                 platform-specific config (e.g., delphi_config_win64.toml) first.
         """
         self.platform = platform
-        self.config_source: Optional[str] = None  # "env", "platform", or "generic"
+        self.config_source: Optional[str] = None  # "env" or "platform"
 
         if config_path:
             self.config_path = config_path
@@ -156,12 +163,10 @@ class ConfigLoader:
             Tuple of (path, source) where source is one of:
             - "env" if from DELPHI_CONFIG
             - "platform" if platform-specific file found
-            - "generic" if fallback to delphi_config.toml
 
         Searches:
             1. DELPHI_CONFIG environment variable (explicit override)
             2. Platform-specific config (e.g., delphi_config_win64.toml)
-            3. Generic config (delphi_config.toml)
         """
         return find_config_file_for_platform(platform=self.platform)
 

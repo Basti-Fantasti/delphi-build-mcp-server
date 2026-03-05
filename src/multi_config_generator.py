@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.buildlog_parser import BuildLogParser
-from src.config import get_platform_config_filename, DEFAULT_CONFIG_NAME
+from src.config import get_platform_config_filename
 from src.models import (
     BuildLogEntry,
     BuildLogInfo,
@@ -130,7 +130,7 @@ class MultiConfigGenerator:
         else:
             # Generate single unified config
             if output_path is None:
-                output_path = output_dir / DEFAULT_CONFIG_NAME
+                output_path = output_dir / "delphi_config.toml"
 
             toml_content = self._generate_toml(parsed_logs)
 
