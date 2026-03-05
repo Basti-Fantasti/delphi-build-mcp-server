@@ -400,7 +400,7 @@ class ConfigGenerator:
 
         lines.append("")
 
-        if log_info.sdk_libpaths:
+        if log_info.sdk_libpaths and log_info.platform == Platform.LINUX64:
             lines.append("libpaths = [")
             for path in log_info.sdk_libpaths:
                 path_str = self._format_path(path)

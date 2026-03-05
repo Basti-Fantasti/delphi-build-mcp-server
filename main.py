@@ -55,7 +55,7 @@ COMPILE_TOOL = Tool(
             },
             "override_platform": {
                 "type": "string",
-                "description": 'Override active platform (e.g., "Win32", "Win64")',
+                "description": 'Override active platform (e.g., "Win32", "Win64", "Linux64", "Android", "Android64")',
                 "default": None,
             },
             "additional_search_paths": {
@@ -118,7 +118,7 @@ GENERATE_MULTI_CONFIG_TOOL = Tool(
         "and platforms. By default, creates separate platform-specific config files "
         "(e.g., delphi_config_win32.toml, delphi_config_win64.toml). "
         "Use this when you have build logs from multiple configurations (Debug/Release) and/or "
-        "platforms (Win32/Win64/Linux64)."
+        "platforms (Win32/Win64/Linux64/Android/Android64)."
     ),
     inputSchema={
         "type": "object",
@@ -126,7 +126,7 @@ GENERATE_MULTI_CONFIG_TOOL = Tool(
             "build_log_paths": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Array of absolute paths to IDE build log files (e.g., Debug-Win32, Release-Win64, Debug-Linux64)",
+                "description": "Array of absolute paths to IDE build log files (e.g., Debug-Win32, Release-Win64, Debug-Linux64, Debug-Android64)",
             },
             "output_config_path": {
                 "type": "string",

@@ -131,8 +131,8 @@ class ConfigLoader:
         if not self.config_path.exists():
             raise FileNotFoundError(
                 f"Configuration file not found: {self.config_path}\n"
-                "Please create delphi_config.toml from the template or generate it "
-                "from a build log using the generate_config_from_build_log tool."
+                "Generate a platform-specific config file using the "
+                "generate_config_from_build_log tool."
             )
 
         # Load TOML file
@@ -294,6 +294,20 @@ class ConfigLoader:
             print(
                 f"Warning: Delphi Linux64 compiler not found at: {dcclinux64}\n"
                 "Linux64 cross-compilation will not be available."
+            )
+
+        dccaarm = self.get_compiler_path("Android")
+        if not dccaarm.exists():
+            print(
+                f"Warning: Delphi Android compiler not found at: {dccaarm}\n"
+                "Android compilation will not be available."
+            )
+
+        dccaarm64 = self.get_compiler_path("Android64")
+        if not dccaarm64.exists():
+            print(
+                f"Warning: Delphi Android64 compiler not found at: {dccaarm64}\n"
+                "Android64 compilation will not be available."
             )
 
         # Warn about missing library paths (non-fatal)

@@ -440,7 +440,7 @@ class BuildLogParser:
         """
         # Match --libpath: followed by semicolon-separated paths
         # The paths continue until we hit another flag (-NH, etc.)
-        pattern = r"--libpath:(.+?)(?=\s+-[A-Z]|\s+\w+\.dpr|$)"
+        pattern = r"--libpath:(.+?)(?=\s+--[a-z]|\s+-[A-Z]|\s+\w+\.dpr|$)"
         match = re.search(pattern, command, re.IGNORECASE | re.DOTALL)
 
         if not match:

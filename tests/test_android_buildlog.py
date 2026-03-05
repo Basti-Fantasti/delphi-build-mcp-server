@@ -98,6 +98,14 @@ class TestAndroidBuildLogParsing:
         libpath_strs = [str(p) for p in info.sdk_libpaths]
         assert any("arm-linux-androideabi" in s for s in libpath_strs)
 
+    def test_android64_sdk_libpaths_clean(self):
+        """Verify libpaths don't contain --linker or other flag garbage."""
+        info = self._parse_log(ANDROID64_DEBUG_LOG)
+        assert len(info.sdk_libpaths) == 2
+        for p in info.sdk_libpaths:
+            assert "--linker" not in str(p)
+            assert "--compiler-rt" not in str(p)
+
     def test_android_no_config_flag(self):
         info = self._parse_log(ANDROID64_DEBUG_LOG)
         assert "--no-config" in info.compiler_flags
