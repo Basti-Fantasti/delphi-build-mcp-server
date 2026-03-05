@@ -294,6 +294,22 @@ class DelphiCompiler:
                 libpath_str = ";".join(str(p) for p in sdk_libpaths)
                 command.append(f"--libpath:{libpath_str}")
 
+        # Add Android SDK options for cross-compilation
+        if platform in ("Android", "Android64"):
+            compiler_rt = self.config_loader.get_android_sdk_compiler_rt()
+            sdk_libpaths = self.config_loader.get_android_sdk_libpaths()
+            linker = self.config_loader.get_android_sdk_linker()
+
+            if compiler_rt:
+                command.append(f"--compiler-rt:{compiler_rt}")
+
+            if sdk_libpaths:
+                libpath_str = ";".join(str(p) for p in sdk_libpaths)
+                command.append(f"--libpath:{libpath_str}")
+
+            if linker:
+                command.append(f"--linker:{linker}")
+
         # Add additional flags from caller
         command.extend(additional_flags)
 
@@ -440,6 +456,8 @@ class DelphiCompiler:
         if platform == "Linux64":
             # Linux executables/libraries have no extension (or .so for shared libs)
             exe_extension = ".so" if is_package else ""
+        elif platform in ("Android", "Android64"):
+            exe_extension = ".so"  # Android apps always produce .so
         else:
             # Windows: .bpl for packages, .exe for applications
             exe_extension = ".bpl" if is_package else ".exe"
@@ -473,6 +491,10 @@ class DelphiCompiler:
             subdirs = ["Win64x/Debug", "Win64x/Release"]
         elif platform == "Linux64":
             subdirs = ["Linux64/Debug", "Linux64/Release"]
+        elif platform == "Android":
+            subdirs = ["Android/Debug", "Android/Release"]
+        elif platform == "Android64":
+            subdirs = ["Android64/Debug", "Android64/Release"]
 
         for subdir in subdirs:
             exe_path = project_dir / subdir / exe_name
