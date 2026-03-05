@@ -14,6 +14,8 @@ class Platform(str, Enum):
     WIN64 = "Win64"
     WIN64X = "Win64x"
     LINUX64 = "Linux64"
+    ANDROID = "Android"
+    ANDROID64 = "Android64"
 
 
 class BuildConfig(str, Enum):
@@ -117,8 +119,14 @@ class DelphiConfig(BaseModel):
     compiler_linux64: Optional[Path] = Field(
         default=None, description="Override path to dcclinux64.exe"
     )
+    compiler_android: Optional[Path] = Field(
+        default=None, description="Override path to dccaarm.exe"
+    )
+    compiler_android64: Optional[Path] = Field(
+        default=None, description="Override path to dccaarm64.exe"
+    )
 
-    @field_validator("root_path", "compiler_win32", "compiler_win64", "compiler_linux64", mode="before")
+    @field_validator("root_path", "compiler_win32", "compiler_win64", "compiler_linux64", "compiler_android", "compiler_android64", mode="before")
     @classmethod
     def convert_to_path(cls, v: str | Path | None) -> Path | None:
         """Convert string paths to Path objects."""
@@ -140,6 +148,10 @@ class SystemPaths(BaseModel):
     lib_win64x_debug: Optional[Path] = Field(default=None)
     lib_linux64_release: Optional[Path] = Field(default=None)
     lib_linux64_debug: Optional[Path] = Field(default=None)
+    lib_android_release: Optional[Path] = Field(default=None)
+    lib_android_debug: Optional[Path] = Field(default=None)
+    lib_android64_release: Optional[Path] = Field(default=None)
+    lib_android64_debug: Optional[Path] = Field(default=None)
 
     @field_validator(
         "rtl",
@@ -152,6 +164,10 @@ class SystemPaths(BaseModel):
         "lib_win64x_debug",
         "lib_linux64_release",
         "lib_linux64_debug",
+        "lib_android_release",
+        "lib_android_debug",
+        "lib_android64_release",
+        "lib_android64_debug",
         mode="before",
     )
     @classmethod
@@ -216,6 +232,34 @@ class LinuxSDKConfig(BaseModel):
         return [Path(p) if isinstance(p, str) else p for p in v]
 
 
+class AndroidSDKConfig(BaseModel):
+    """Android SDK/NDK configuration for cross-compilation."""
+
+    compiler_rt: Optional[Path] = Field(
+        default=None, description="Path to libclang_rt.builtins (--compiler-rt)"
+    )
+    libpaths: list[Path] = Field(
+        default_factory=list, description="NDK sysroot library paths (--libpath)"
+    )
+    linker: Optional[Path] = Field(
+        default=None, description="Path to ld.lld.exe linker (--linker)"
+    )
+
+    @field_validator("compiler_rt", "linker", mode="before")
+    @classmethod
+    def convert_paths(cls, v: str | Path | None) -> Path | None:
+        """Convert string paths to Path objects."""
+        if v is None or isinstance(v, Path):
+            return v
+        return Path(v)
+
+    @field_validator("libpaths", mode="before")
+    @classmethod
+    def convert_libpaths(cls, v: list[str | Path]) -> list[Path]:
+        """Convert libpaths to Path objects."""
+        return [Path(p) if isinstance(p, str) else p for p in v]
+
+
 class Config(BaseModel):
     """Complete configuration model."""
 
@@ -226,6 +270,9 @@ class Config(BaseModel):
     )
     linux_sdk: LinuxSDKConfig = Field(
         default_factory=LinuxSDKConfig, description="Linux SDK settings for cross-compilation"
+    )
+    android_sdk: AndroidSDKConfig = Field(
+        default_factory=AndroidSDKConfig, description="Android SDK/NDK settings for cross-compilation"
     )
 
 
@@ -318,8 +365,14 @@ class BuildLogInfo(BaseModel):
     resource_compiler_path: Optional[Path] = Field(
         default=None, description="Path to resource compiler (cgrc.exe)"
     )
+    android_compiler_rt: Optional[Path] = Field(
+        default=None, description="Path to libclang_rt.builtins (--compiler-rt)"
+    )
+    android_linker: Optional[Path] = Field(
+        default=None, description="Path to ld.lld.exe linker (--linker)"
+    )
 
-    @field_validator("compiler_path", "sdk_sysroot", "resource_compiler_path", mode="before")
+    @field_validator("compiler_path", "sdk_sysroot", "resource_compiler_path", "android_compiler_rt", "android_linker", mode="before")
     @classmethod
     def convert_compiler_path(cls, v: str | Path | None) -> Path | None:
         """Convert compiler path to Path object."""
