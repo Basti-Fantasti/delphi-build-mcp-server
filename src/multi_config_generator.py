@@ -372,7 +372,7 @@ class MultiConfigGenerator:
                 lines.append(f'{field_name} = "{self._format_path(lib_path)}"')
 
         # Add placeholder comments for platforms not in build logs
-        all_platforms = ["Win32", "Win64", "Win64x", "Linux64"]
+        all_platforms = ["Win32", "Win64", "Win64x", "Linux64", "Android", "Android64"]
         for platform in all_platforms:
             if platform not in platforms:
                 for config in ["debug", "release"]:
@@ -438,7 +438,10 @@ class MultiConfigGenerator:
             # Check if this path is platform-specific (contains platform name in path)
             # Note: win64x must be checked before win64 since win64 is a substring
             path_lower = str(path).lower()
-            is_platform_specific = any(p in path_lower for p in ["/win32", "/win64x", "/win64", "/linux64", "\\win32", "\\win64x", "\\win64", "\\linux64"])
+            is_platform_specific = any(p in path_lower for p in [
+                "/win32", "/win64x", "/win64", "/linux64", "/android64", "/android",
+                "\\win32", "\\win64x", "\\win64", "\\linux64", "\\android64", "\\android",
+            ])
 
             if is_platform_specific:
                 # Add platform suffix for platform-specific paths

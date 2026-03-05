@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 from src.buildlog_parser import BuildLogParser
-from src.config import get_platform_config_filename, DEFAULT_CONFIG_NAME
-from src.models import BuildLogInfo, ConfigGenerationResult, DetectedInfo
+from src.config import get_platform_config_filename
+from src.models import BuildLogInfo, ConfigGenerationResult, DetectedInfo, Platform
 
 
 class ConfigGenerator:
@@ -54,7 +54,7 @@ class ConfigGenerator:
             if use_platform_specific_name:
                 output_filename = get_platform_config_filename(log_info.platform.value)
             else:
-                output_filename = DEFAULT_CONFIG_NAME
+                output_filename = "delphi_config.toml"
             output_path = Path(output_filename)
 
         # Generate TOML content
@@ -137,6 +137,10 @@ class ConfigGenerator:
 
         # Linux SDK section (for cross-compilation)
         lines.extend(self._generate_linux_sdk_section(log_info))
+        lines.append("")
+
+        # Android SDK section (for cross-compilation)
+        lines.extend(self._generate_android_sdk_section(log_info))
 
         return "\n".join(lines)
 
@@ -169,6 +173,8 @@ class ConfigGenerator:
         lines.append('# compiler_win32 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc32.exe"')
         lines.append('# compiler_win64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc64.exe"')
         lines.append('# compiler_linux64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcclinux64.exe"')
+        lines.append('# compiler_android = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dccaarm.exe"')
+        lines.append('# compiler_android64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dccaarm64.exe"')
 
         return lines
 
@@ -225,6 +231,10 @@ class ConfigGenerator:
             "lib_win64x_debug": None,
             "lib_linux64_release": None,
             "lib_linux64_debug": None,
+            "lib_android_release": None,
+            "lib_android_debug": None,
+            "lib_android64_release": None,
+            "lib_android64_debug": None,
         }
 
         for path in system_paths:
@@ -233,6 +243,14 @@ class ConfigGenerator:
                 lib_paths["lib_win32_release"] = path
             elif "\\lib\\win32\\debug" in path_str:
                 lib_paths["lib_win32_debug"] = path
+            elif "\\lib\\android64\\release" in path_str:
+                lib_paths["lib_android64_release"] = path
+            elif "\\lib\\android64\\debug" in path_str:
+                lib_paths["lib_android64_debug"] = path
+            elif "\\lib\\android\\release" in path_str:
+                lib_paths["lib_android_release"] = path
+            elif "\\lib\\android\\debug" in path_str:
+                lib_paths["lib_android_debug"] = path
             elif "\\lib\\win64x\\release" in path_str:
                 # Check Win64x before Win64 (since Win64 is substring of Win64x)
                 lib_paths["lib_win64x_release"] = path
@@ -396,6 +414,43 @@ class ConfigGenerator:
             lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/lib/x86_64-linux-gnu",')
             lines.append('#     "C:/Users/${USERNAME}/Documents/Embarcadero/Studio/SDKs/ubuntu22.04.sdk/lib64",')
             lines.append("# ]")
+
+        return lines
+
+    def _generate_android_sdk_section(self, log_info: BuildLogInfo) -> list[str]:
+        """Generate [android_sdk] section for Android cross-compilation."""
+        lines = [
+            "# " + "=" * 77,
+            "# Android SDK/NDK Configuration (for cross-compilation)",
+            "# " + "=" * 77,
+            "[android_sdk]",
+            "# Android NDK paths for cross-compilation to Android/Android64",
+        ]
+
+        if log_info.android_compiler_rt:
+            rt_str = self._format_path(log_info.android_compiler_rt)
+            lines.append(f'compiler_rt = "{rt_str}"')
+        else:
+            lines.append('# compiler_rt = "C:/path/to/ndk/lib/clang/18/lib/linux/libclang_rt.builtins-aarch64-android.a"')
+
+        lines.append("")
+
+        if log_info.sdk_libpaths and log_info.platform in (Platform.ANDROID, Platform.ANDROID64):
+            lines.append("libpaths = [")
+            for path in log_info.sdk_libpaths:
+                path_str = self._format_path(path)
+                lines.append(f'    "{path_str}",')
+            lines.append("]")
+        else:
+            lines.append("# libpaths = []")
+
+        lines.append("")
+
+        if log_info.android_linker:
+            linker_str = self._format_path(log_info.android_linker)
+            lines.append(f'linker = "{linker_str}"')
+        else:
+            lines.append('# linker = "C:/path/to/ndk/bin/ld.lld.exe"')
 
         return lines
 
