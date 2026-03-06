@@ -101,7 +101,8 @@ class TestAndroidBuildLogParsing:
     def test_android64_sdk_libpaths_clean(self):
         """Verify libpaths don't contain --linker or other flag garbage."""
         info = self._parse_log(ANDROID64_DEBUG_LOG)
-        assert len(info.sdk_libpaths) == 2
+        # 2 Delphi lib paths (debug + release) + 2 NDK sysroot paths
+        assert len(info.sdk_libpaths) == 4
         for p in info.sdk_libpaths:
             assert "--linker" not in str(p)
             assert "--compiler-rt" not in str(p)

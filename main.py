@@ -218,7 +218,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             raise ValueError(f"Unknown tool: {name}")
 
     except Exception as e:
-        error_msg = f"Error executing {name}: {str(e)}"
+        import traceback
+        tb = traceback.format_exc()
+        error_msg = f"Error executing {name}: {str(e)}\n\nTraceback:\n{tb}"
         return [TextContent(type="text", text=error_msg)]
 
 

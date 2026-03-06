@@ -202,6 +202,9 @@ class BuildLogParser:
             android_compiler_rt = self._extract_android_compiler_rt(command)
             android_linker = self._extract_android_linker(command)
             sdk_libpaths = self._extract_sdk_libpaths(command)
+            # Add Delphi RTL lib paths for the linker (same as Linux64)
+            delphi_lib_paths = self._extract_delphi_lib_paths(search_paths, platform)
+            sdk_libpaths = delphi_lib_paths + sdk_libpaths
 
         return BuildLogInfo(
             compiler_path=compiler_path,
@@ -236,7 +239,7 @@ class BuildLogParser:
         for flag in path_flags:
             # Match flag followed by everything until we hit another dash flag
             # Use lookahead to stop at next flag like -LE, -LN, -NBC, etc.
-            pattern = rf"{flag}(.*?)(?=\s+-[A-Z]+|\s+Working\.dpr|$)"
+            pattern = rf"(?<=\s){flag}(.*?)(?=\s+-[A-Z]+|\s+--[a-z]|\s+\w+\.dpr|$)"
             matches = re.finditer(pattern, command, re.IGNORECASE | re.DOTALL)
 
             for match in matches:
@@ -306,7 +309,7 @@ class BuildLogParser:
         """
         # Match -NS flag followed by everything until we hit another flag like -O, -R, -U, etc.
         # The namespace string may span multiple lines in the build log
-        pattern = r"-NS(.*?)(?=\s+-[A-Z]|\s+\w+\.dpr|$)"
+        pattern = r"-NS(.*?)(?=\s+-[A-Z]|\s+--[a-z]|\s+\w+\.dpr|$)"
         match = re.search(pattern, command, re.IGNORECASE | re.DOTALL)
 
         if not match:

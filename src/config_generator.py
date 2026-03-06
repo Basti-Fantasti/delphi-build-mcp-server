@@ -557,7 +557,7 @@ class ConfigGenerator:
                     return name
 
         # Fallback: use directory name
-        dir_name = path.name.lower().replace(" ", "_").replace("-", "_")
+        dir_name = path.name.lower().replace(" ", "_").replace("-", "_").replace(".", "_")
         # Remove version numbers
         dir_name = re.sub(r"[\d._-]+$", "", dir_name)
 

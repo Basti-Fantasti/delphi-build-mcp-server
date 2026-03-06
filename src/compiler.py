@@ -22,7 +22,7 @@ class DelphiCompiler:
         Args:
             config_loader: Config loader instance. If None, creates a new one.
         """
-        self.config_loader = config_loader or ConfigLoader()
+        self.config_loader = config_loader
         self.config = None
 
     def compile_project(
@@ -72,7 +72,8 @@ class DelphiCompiler:
 
         # Load configuration with platform so the correct config file is found
         if not self.config:
-            self.config_loader = ConfigLoader(platform=platform)
+            if not self.config_loader:
+                self.config_loader = ConfigLoader(platform=platform)
             self.config = self.config_loader.load()
 
         # Get the actual source file to compile (.dpr or .dpk, not .dproj)
@@ -304,6 +305,14 @@ class DelphiCompiler:
                 command.append(f"--compiler-rt:{compiler_rt}")
 
             if sdk_libpaths:
+                # Add architecture-specific clang lib directory for libunwind
+                # Derived from compiler_rt path: .../lib/clang/VER/lib/linux/ + arch/
+                if compiler_rt:
+                    arch_subdir = "aarch64" if platform == "Android64" else "arm"
+                    clang_arch_dir = Path(compiler_rt).parent / arch_subdir
+                    if clang_arch_dir.exists():
+                        sdk_libpaths = list(sdk_libpaths) + [clang_arch_dir]
+
                 libpath_str = ";".join(str(p) for p in sdk_libpaths)
                 command.append(f"--libpath:{libpath_str}")
 

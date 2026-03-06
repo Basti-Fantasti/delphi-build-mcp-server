@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-06
+
+### Added
+
+- **Android Platform Support**: Compile Delphi projects for Android (32-bit) and Android64 targets
+  - New `Android` and `Android64` platform enum values
+  - Build log parser detects `dccaarm.exe` (Android) and `dccaarm64.exe` (Android64) compilers
+  - Extracts `--compiler-rt`, `--libpath`, and `--linker` flags from Android build logs
+  - New `AndroidSDKConfig` model for NDK paths (compiler_rt, libpaths, linker)
+  - Config generator produces `[android_sdk]` section with NDK paths
+  - Compiler passes `--compiler-rt`, `--libpath`, and `--linker` flags for Android cross-compilation
+  - Platform-specific config files: `delphi_config_android.toml` and `delphi_config_android64.toml`
+
+### Changed
+
+- **Platform-specific config files are now required**: Removed the generic `delphi_config.toml` fallback. Each platform must have its own config file (e.g., `delphi_config_win64.toml`, `delphi_config_android64.toml`). Generate platform-specific configs from IDE build logs using the `generate_config_from_build_log` tool.
+
+### Fixed
+
+- **Build log path extraction leaking Android SDK flags**: The `-U`/`-I`/`-R`/`-O` search path regex did not stop at `--` long flags (`--compiler-rt`, `--libpath`, `--linker`), causing Android SDK paths to leak into the library paths section
+  - Added `\s+--[a-z]` lookahead to stop path capture at long flags
+  - Added `(?<=\s)` lookbehind to prevent spurious matches (e.g., `-R` inside `compiler-Rt`)
+  - Fixed hardcoded `Working\.dpr` to generic `\w+\.dpr` pattern
+- **TOML key dots from filenames**: Config generator produced keys with dots (e.g., `libclang_rt.builtins...`) which TOML interprets as nested tables, causing config loading to fail
+  - Added `.replace(".", "_")` in `_derive_library_name` to sanitize generated TOML keys
+- **Android linker missing `librtlhelper` and `libunwind`**: Android builds failed at link time because Delphi RTL lib paths and the clang architecture-specific lib directory were not passed to `--libpath`
+  - Added `_extract_delphi_lib_paths` for Android builds (same pattern as Linux64) so `librtlhelper.a` is found
+  - Added architecture-specific clang lib directory (`aarch64/` or `arm/`) to `--libpath` at compile time so `libunwind.a` is found
+  - Both fixes apply to Android (32-bit) and Android64
+
 ## [1.8.0] - 2026-02-16
 
 ### Added
