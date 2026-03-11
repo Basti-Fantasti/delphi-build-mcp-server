@@ -138,8 +138,8 @@ class DelphiConfig(BaseModel):
 class SystemPaths(BaseModel):
     """System library paths configuration."""
 
-    rtl: Path = Field(description="RTL source path")
-    vcl: Path = Field(description="VCL source path")
+    rtl: Optional[Path] = Field(default=None, description="RTL source path")
+    vcl: Optional[Path] = Field(default=None, description="VCL source path")
     lib_win32_release: Optional[Path] = Field(default=None)
     lib_win32_debug: Optional[Path] = Field(default=None)
     lib_win64_release: Optional[Path] = Field(default=None)
@@ -181,7 +181,7 @@ class SystemPaths(BaseModel):
 class PathsConfig(BaseModel):
     """All path configurations."""
 
-    system: SystemPaths = Field(description="System library paths")
+    system: SystemPaths = Field(default_factory=SystemPaths, description="System library paths")
     libraries: dict[str, Path] = Field(
         default_factory=dict, description="Third-party library paths"
     )
@@ -264,7 +264,7 @@ class Config(BaseModel):
     """Complete configuration model."""
 
     delphi: DelphiConfig = Field(description="Delphi installation settings")
-    paths: PathsConfig = Field(description="Library paths")
+    paths: PathsConfig = Field(default_factory=PathsConfig, description="Library paths")
     compiler: CompilerConfig = Field(
         default_factory=CompilerConfig, description="Compiler settings"
     )
