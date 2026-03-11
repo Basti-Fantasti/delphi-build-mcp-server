@@ -15,6 +15,8 @@ else:
 from src.buildlog_parser import BuildLogParser
 from src.models import BuildLogInfo, ExtendConfigResult
 
+WINDOWS_PLATFORMS = {"Win32", "Win64", "Win64x"}
+
 
 @dataclass
 class MergeStatistics:
@@ -155,6 +157,14 @@ class ConfigExtender:
     ) -> tuple[dict, MergeStatistics]:
         """Merge new build log info into existing config.
 
+        For Windows platforms (Win32, Win64, Win64x) only the [delphi] section
+        (root_path, version) is updated when it differs.  Search paths, flags,
+        namespaces and aliases are skipped because Windows targets are compiled
+        via MSBuild which manages those settings through the .dproj file.
+
+        For cross-compile platforms (Linux64, Android*) all settings are merged
+        as usual.
+
         Args:
             existing: Existing configuration dictionary
             new_log_info: New build log information
@@ -164,6 +174,32 @@ class ConfigExtender:
         """
         stats = MergeStatistics()
         merged = self._deep_copy_dict(existing)
+
+        platform = new_log_info.platform.value
+        is_windows = platform in WINDOWS_PLATFORMS
+
+        if is_windows:
+            # For Windows: only update [delphi] root_path / version when different
+            if "delphi" not in merged:
+                merged["delphi"] = {}
+            delphi_section = merged["delphi"]
+
+            compiler_path = new_log_info.compiler_path
+            root_path = compiler_path.parent.parent
+            root_path_str = self._format_path(root_path)
+
+            if delphi_section.get("root_path") != root_path_str:
+                delphi_section["root_path"] = root_path_str
+                stats.settings_updated["delphi.root_path"] = 1
+
+            if delphi_section.get("version") != new_log_info.delphi_version:
+                delphi_section["version"] = new_log_info.delphi_version
+                stats.settings_updated["delphi.version"] = 1
+
+            # Leave Linux/Android SDK sections untouched
+            return merged, stats
+
+        # --- Cross-compile platform path (Linux64, Android*) ---
 
         # Ensure required sections exist
         if "paths" not in merged:
