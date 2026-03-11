@@ -87,6 +87,15 @@ def find_config_file_for_platform(
     if platform_config_path.exists():
         return platform_config_path, "platform"
 
+    # Windows platforms can fall back to generic delphi_config.toml
+    # (MSBuild handles paths/compiler details; only [delphi] section is needed)
+    WINDOWS_PLATFORMS = {"win32", "win64", "win64x"}
+    platform_normalized = platform.lower()
+    if platform_normalized in WINDOWS_PLATFORMS:
+        generic_config_path = base_dir / "delphi_config.toml"
+        if generic_config_path.exists():
+            return generic_config_path, "generic"
+
     raise FileNotFoundError(
         f"Platform-specific config file not found: {platform_filename}\n"
         f"Expected location: {platform_config_path}\n"
@@ -217,11 +226,12 @@ class ConfigLoader:
         # Parse Delphi configuration
         delphi_config = DelphiConfig(**raw_config["delphi"])
 
-        # Parse system paths
-        system_paths = SystemPaths(**raw_config["paths"]["system"])
+        # Parse system paths (optional; Windows platforms using generic config may omit this)
+        paths_raw = raw_config.get("paths", {})
+        system_paths = SystemPaths(**paths_raw.get("system", {}))
 
         # Parse library paths
-        libraries = raw_config["paths"].get("libraries", {})
+        libraries = paths_raw.get("libraries", {})
 
         # Create PathsConfig
         paths_config = PathsConfig(system=system_paths, libraries=libraries)
@@ -272,6 +282,12 @@ class ConfigLoader:
                 f"Delphi installation not found at: {self.config.delphi.root_path}\n"
                 "Please verify the delphi.root_path setting in your config file."
             )
+
+        # For Windows platforms, MSBuild handles compiler and path resolution;
+        # only the [delphi] section (root_path) is required.
+        windows_platforms = {"win32", "win64", "win64x"}
+        if self.platform and self.platform.lower() in windows_platforms:
+            return
 
         # Check if compilers exist
         dcc32 = self.get_compiler_path("Win32")
