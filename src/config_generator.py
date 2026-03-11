@@ -10,6 +10,10 @@ from src.config import get_platform_config_filename
 from src.models import BuildLogInfo, ConfigGenerationResult, DetectedInfo, Platform
 
 
+# Windows platforms use MSBuild for compilation; only a minimal config is needed
+WINDOWS_PLATFORMS = {Platform.WIN32, Platform.WIN64, Platform.WIN64X}
+
+
 class ConfigGenerator:
     """Generates TOML configuration files from build log information."""
 
@@ -49,16 +53,22 @@ class ConfigGenerator:
         parser = BuildLogParser(build_log_path)
         log_info = parser.parse()
 
+        # Determine if this is a Windows platform (uses MSBuild, minimal config)
+        is_windows_platform = log_info.platform in WINDOWS_PLATFORMS
+
         # Determine output path
         if output_path is None:
-            if use_platform_specific_name:
+            if use_platform_specific_name and not is_windows_platform:
                 output_filename = get_platform_config_filename(log_info.platform.value)
             else:
                 output_filename = "delphi_config.toml"
             output_path = Path(output_filename)
 
         # Generate TOML content
-        toml_content = self._generate_toml(log_info)
+        if is_windows_platform:
+            toml_content = self._generate_minimal_toml(log_info)
+        else:
+            toml_content = self._generate_toml(log_info)
 
         # Write to file
         with open(output_path, "w", encoding="utf-8") as f:
@@ -141,6 +151,44 @@ class ConfigGenerator:
 
         # Android SDK section (for cross-compilation)
         lines.extend(self._generate_android_sdk_section(log_info))
+
+        return "\n".join(lines)
+
+    def _generate_minimal_toml(self, log_info: BuildLogInfo) -> str:
+        """Generate minimal TOML content for Windows platforms.
+
+        Windows projects are compiled via MSBuild, which handles all compiler
+        settings, search paths, and flags automatically from the .dproj file.
+        Only the [delphi] section with the installation root is required.
+
+        Args:
+            log_info: Parsed build log information
+
+        Returns:
+            Minimal TOML file content as string
+        """
+        # Store Delphi version for use in _format_path
+        self._delphi_version = log_info.delphi_version
+
+        lines = []
+
+        # Header
+        lines.append("# Delphi Build MCP Server Configuration")
+        lines.append("#")
+        lines.append("# Auto-generated from IDE build log")
+        lines.append(f"# Delphi Version: {log_info.delphi_version}")
+        lines.append(f"# Platform: {log_info.platform.value}")
+        lines.append(f"# Build Config: {log_info.build_config}")
+        lines.append("#")
+        lines.append("# Windows platforms are compiled via MSBuild, which reads all compiler")
+        lines.append("# settings directly from the .dproj file. No additional path or compiler")
+        lines.append("# configuration is needed here — MSBuild handles everything automatically.")
+        lines.append("#")
+        lines.append("")
+
+        # Delphi installation section only
+        lines.extend(self._generate_delphi_section(log_info))
+        lines.append("")
 
         return "\n".join(lines)
 

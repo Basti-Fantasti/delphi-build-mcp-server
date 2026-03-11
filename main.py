@@ -22,6 +22,8 @@ from src.config_generator import ConfigGenerator
 from src.config_extender import ConfigExtender
 from src.multi_config_generator import MultiConfigGenerator
 from src.path_utils import convert_wsl_to_windows_path
+from src.msbuild_compiler import MsBuildCompiler
+from src.dproj_parser import DProjParser
 
 
 # Create MCP server instance
@@ -225,17 +227,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 
 async def handle_compile_project(arguments: dict) -> str:
-    """Handle compile_delphi_project tool invocation.
-
-    Args:
-        arguments: Tool arguments
-
-    Returns:
-        JSON string with compilation result
-    """
+    """Handle compile_delphi_project tool invocation."""
     import json
 
-    # Extract arguments (convert WSL paths when running on Windows)
+    # Extract arguments (convert WSL paths — result is Windows-format path)
     project_path = Path(convert_wsl_to_windows_path(arguments["project_path"]))
     force_build_all = arguments.get("force_build_all", False)
     override_config = arguments.get("override_config")
@@ -243,20 +238,58 @@ async def handle_compile_project(arguments: dict) -> str:
     additional_search_paths = arguments.get("additional_search_paths", [])
     additional_flags = arguments.get("additional_flags", [])
 
-    # Initialize compiler
-    compiler = DelphiCompiler()
+    # Note: project_path is a Windows-format path (e.g., C:\...) so
+    # Path.exists() won't work on WSL. Validation happens inside the
+    # compiler subprocess (which runs on Windows).
 
-    # Compile project
-    result = compiler.compile_project(
-        project_path=project_path,
-        force_build_all=force_build_all,
-        override_config=override_config,
-        override_platform=override_platform,
-        additional_search_paths=additional_search_paths,
-        additional_flags=additional_flags,
-    )
+    # Parse .dproj to determine platform (standalone, before compiler selection)
+    dproj_path = project_path if project_path.suffix.lower() == ".dproj" else project_path.with_suffix(".dproj")
+    dproj_settings = None
+    platform = override_platform or "Win32"
 
-    # Convert to JSON
+    # Try to parse .dproj for platform detection
+    # DProjParser runs in-process reading the file, so it needs a WSL-accessible path
+    try:
+        dproj_parser = DProjParser(dproj_path)
+        dproj_settings = dproj_parser.parse(override_config, override_platform)
+        platform = dproj_settings.active_platform
+    except FileNotFoundError:
+        # .dproj doesn't exist or isn't accessible — use override_platform or default
+        pass
+
+    # Route based on platform
+    windows_platforms = {"Win32", "Win64", "Win64x"}
+
+    if platform in windows_platforms:
+        if dproj_settings is None:
+            raise FileNotFoundError(
+                f".dproj file required for MSBuild compilation: {dproj_path}. "
+                f"MSBuild needs the .dproj to build the project."
+            )
+        # Use MSBuild for Windows targets
+        config_loader = ConfigLoader(platform=platform)
+        config = config_loader.load()
+
+        compiler = MsBuildCompiler(delphi_root=config.delphi.root_path)
+        result = compiler.compile_project(
+            project_path=dproj_path,
+            dproj_settings=dproj_settings,
+            force_build_all=force_build_all,
+            additional_search_paths=additional_search_paths,
+            additional_flags=additional_flags,
+        )
+    else:
+        # Use direct dcc for cross-compilation targets (unchanged)
+        compiler = DelphiCompiler()
+        result = compiler.compile_project(
+            project_path=project_path,
+            force_build_all=force_build_all,
+            override_config=override_config,
+            override_platform=override_platform,
+            additional_search_paths=additional_search_paths,
+            additional_flags=additional_flags,
+        )
+
     return json.dumps(result.model_dump(), indent=2)
 
 
