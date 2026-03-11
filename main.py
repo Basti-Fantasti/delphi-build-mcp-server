@@ -35,7 +35,9 @@ COMPILE_TOOL = Tool(
     name="compile_delphi_project",
     description=(
         "Compile a Delphi project (.dpr or .dproj file) and return parsed results. "
-        "Automatically reads build configuration from .dproj file and library paths from config file. "
+        "For Windows targets (Win32/Win64/Win64x), uses MSBuild for IDE-identical output "
+        "including icons, manifests, and DPI awareness. For cross-compilation targets "
+        "(Linux64/Android/Android64), uses direct dcc compiler invocation. "
         "Returns only compilation errors, filtering out warnings and hints."
     ),
     inputSchema={
@@ -81,10 +83,9 @@ GENERATE_CONFIG_TOOL = Tool(
     name="generate_config_from_build_log",
     description=(
         "Generate delphi_config.toml file automatically by parsing an IDE build log. "
-        "Extracts all library paths, compiler settings, and configuration from a successful "
-        "compilation performed in the Delphi IDE. This eliminates manual configuration. "
-        "Supports platform-specific config files (e.g., delphi_config_win64.toml) for "
-        "simpler multi-platform setups."
+        "For Windows targets, generates a minimal config with only the Delphi installation path "
+        "(MSBuild handles all other settings). For cross-compilation targets (Linux64/Android), "
+        "generates a full config with all library paths and compiler settings."
     ),
     inputSchema={
         "type": "object",
