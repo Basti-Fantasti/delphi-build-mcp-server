@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-03-12
+
+### Added
+
+- **MSBuild Hybrid Compilation**: Windows targets (Win32/Win64/Win64x) now compile via MSBuild instead of direct `dcc32.exe`/`dcc64.exe` invocation, producing IDE-identical output
+  - Application icon is embedded (MAINICON from .dproj)
+  - Application manifest is embedded (asInvoker execution level, preventing false admin elevation)
+  - DPI awareness settings are applied
+  - Version info resources match IDE output exactly
+  - Output executable is byte-identical to IDE-compiled builds
+- **New `MsBuildCompiler` class** (`src/msbuild_compiler.py`): Orchestrates MSBuild compilation with environment setup from `rsvars.bat`, command construction, subprocess execution, and output parsing
+- **New `RsvarsParser` class** (`src/rsvars_parser.py`): Parses Delphi's `rsvars.bat` to extract environment variables (`BDS`, `FrameworkDir`, `PATH`, etc.) for MSBuild execution, with `%VARNAME%` expansion and UTF-8 BOM handling
+- **New `MsBuildOutputParser` class** (`src/msbuild_output_parser.py`): Extracts the `_PasCoreCompile` section from MSBuild output (German and English locales) and delegates to the existing `OutputParser` for error/warning parsing
+- **Generic `delphi_config.toml` for Windows**: A single minimal config file (only `[delphi]` section with `version` and `root_path`) now covers all Windows targets — MSBuild reads everything else from the .dproj
+- **MSBuild `cmd.exe` fallback**: If direct MSBuild execution fails (e.g., environment incomplete), automatically falls back to `cmd.exe /c "call rsvars.bat && msbuild.exe ..."`
+- **47 new tests** covering rsvars parsing, MSBuild output parsing, MsBuildCompiler orchestration, config fallback, routing logic, and minimal config generation
+
+### Changed
+
+- **Platform-based routing**: `handle_compile_project` now parses the .dproj first (standalone) to determine the platform, then routes Windows targets to `MsBuildCompiler` and cross-compilation targets (Linux64/Android/Android64) to the existing `DelphiCompiler`
+- **Config loading for Windows**: Windows platforms fall back to generic `delphi_config.toml` (after checking for platform-specific files). Cross-compilation platforms still require platform-specific config files.
+- **Config validation is platform-aware**: For Windows platforms, only `delphi.root_path` is validated. For cross-compilation, full validation (compiler paths, SDK paths, library paths) is performed as before.
+- **Config generators produce minimal output for Windows**: `ConfigGenerator`, `MultiConfigGenerator`, and `ConfigExtender` now generate/merge minimal configs for Windows platforms (only `[delphi]` section)
+- **`SystemPaths.rtl` and `SystemPaths.vcl` are now optional**: These fields default to `None`, allowing minimal configs without paths sections
+- **`PathsConfig` and `Config` have defaults**: Both models now use `default_factory` for optional sections, preventing crashes on minimal configs
+- **Tool descriptions updated**: `compile_delphi_project` and `generate_config_from_build_log` descriptions now mention MSBuild for Windows targets
+- **MSBuild timeout**: 10 minutes (vs 5 minutes for direct dcc) to accommodate resource compilation and pre/post-build events
+
+### Notes
+
+- **No API changes**: Same tool names, same parameters, same return types. Existing callers require no updates.
+- **Backwards compatible**: Existing platform-specific TOML files (e.g., `delphi_config_win32.toml`) continue to work — the config lookup checks for them before falling back to generic `delphi_config.toml`.
+- **`additional_search_paths` and `additional_flags`**: Ignored with a warning when MSBuild is used (MSBuild reads these from the .dproj). For cross-compilation targets, these parameters work as before.
+- **`force_build_all`**: Maps to `/t:Rebuild` for MSBuild (vs `-B` flag for direct dcc).
+
 ## [1.9.0] - 2026-03-06
 
 ### Added
