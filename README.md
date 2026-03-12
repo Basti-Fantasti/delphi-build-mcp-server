@@ -4,6 +4,9 @@ A Model Context Protocol (MCP) server that enables AI coding agents like Claude 
 
 ## Features
 
+- **IDE-Identical Windows Builds**: Windows targets (Win32/Win64/Win64x) compile via MSBuild, producing byte-identical output to the Delphi IDE — including icons, manifests, and DPI awareness
+- **Hybrid Compilation**: MSBuild for Windows targets, direct dcc for cross-compilation (Linux64/Android/Android64)
+- **Minimal Configuration**: Windows targets need only the Delphi installation path — MSBuild reads everything else from the .dproj
 - **Automatic Configuration**: Generate config from IDE build logs with multi-line parsing
 - **Multi-Config Support**: Generate unified config from multiple build logs (Debug/Release × Win32/Win64/Win64x/Linux64)
 - **Extend Configuration**: Add new platforms or libraries to existing config without regenerating
@@ -12,8 +15,7 @@ A Model Context Protocol (MCP) server that enables AI coding agents like Claude 
 - **Filtered Output**: Returns only errors, filters out warnings and hints
 - **Multi-Language Support**: Parses both English and German compiler output
 - **Response File Support**: Handles command lines >8000 characters automatically
-- **Cross-Platform**: Supports Win32, Win64, Win64x (LLVM), and Linux64 cross-compilation
-- **80+ Library Paths**: Successfully handles projects with extensive dependencies
+- **Cross-Platform**: Supports Win32, Win64, Win64x (LLVM), Linux64, Android, and Android64
 - **Environment Variables**: Auto-expands `${USERNAME}` in paths
 - **MCP Compatible**: Works with Claude Code, Cline, and other MCP clients
 - **Network Transport**: Streamable HTTP support for remote access (e.g., WSL-Ubuntu to Windows host)
@@ -75,21 +77,21 @@ uv run python -m src.multi_config_generator build_win32.log build_win64.log --un
 uv run python -m src.multi_config_generator *.log --no-env-vars
 ```
 
-**Platform-Specific Config Files:**
+**Configuration Strategy:**
 
-The server supports platform-specific configuration files with automatic fallback:
+Windows targets (Win32/Win64/Win64x) use MSBuild, which reads all compiler settings from the .dproj file. Only a minimal `delphi_config.toml` with the Delphi installation path is needed. Cross-compilation targets (Linux64/Android/Android64) still need full platform-specific config files.
 
-| Platform | Config File |
-|----------|-------------|
-| Win32 | `delphi_config_win32.toml` |
-| Win64 | `delphi_config_win64.toml` |
-| Win64x | `delphi_config_win64x.toml` |
-| Linux64 | `delphi_config_linux64.toml` |
+| Platform | Config File | Content |
+|----------|-------------|---------|
+| Win32/Win64/Win64x | `delphi_config.toml` | Minimal (only `[delphi]` section) |
+| Linux64 | `delphi_config_linux64.toml` | Full (paths, flags, SDK) |
+| Android | `delphi_config_android.toml` | Full (paths, flags, NDK) |
+| Android64 | `delphi_config_android64.toml` | Full (paths, flags, NDK) |
 
-**Search order:**
+**Config search order:**
 1. `DELPHI_CONFIG` environment variable (explicit override)
 2. `delphi_config_{platform}.toml` (platform-specific)
-3. `delphi_config.toml` (generic fallback)
+3. `delphi_config.toml` (generic fallback — Windows targets only)
 
 Or use the Python API:
 
@@ -321,11 +323,14 @@ delphi-build-mcp-server/
 |   |-- buildlog_parser.py        # Parse IDE build logs
 |   |-- dproj_parser.py           # Parse .dproj files
 |   |-- config.py                 # Load TOML configuration
-|   |-- output_parser.py          # Parse compiler output
+|   |-- output_parser.py          # Parse dcc compiler output
+|   |-- msbuild_output_parser.py  # Parse MSBuild output (extracts _PasCoreCompile)
+|   |-- msbuild_compiler.py       # MSBuild compilation for Windows targets
+|   |-- rsvars_parser.py          # Parse rsvars.bat for MSBuild environment
 |   |-- config_generator.py       # Generate TOML configs (single log)
 |   |-- multi_config_generator.py # Generate TOML configs (multi-log)
 |   |-- config_extender.py        # Extend existing TOML configs
-|   +-- compiler.py               # Compiler orchestration
+|   +-- compiler.py               # Direct dcc compilation for cross-compilation
 |-- tests/                        # Unit tests
 |-- start_mcp_server.bat          # Auto-start script for Windows (shell:startup)
 |-- test_stdio_wsl.sh             # Test stdio transport from WSL
@@ -351,31 +356,25 @@ delphi-build-mcp-server/
 1. AI Agent calls compile_delphi_project
    |
    v
-2. MCP Server loads delphi_config.toml
-   - Delphi installation paths
-   - Library search paths
+2. Parse .dproj file to determine platform
    |
    v
-3. Parse .dproj file
-   - Active configuration (Debug/Release)
-   - Compiler flags and defines
-   - Project-specific search paths
+3. Route based on platform:
+   |
+   +---> Windows (Win32/Win64/Win64x):
+   |     - Load minimal config (delphi.root_path only)
+   |     - Set up MSBuild environment from rsvars.bat
+   |     - Execute msbuild.exe (IDE-identical output)
+   |     - Parse _PasCoreCompile section for errors
+   |
+   +---> Cross-compilation (Linux64/Android/Android64):
+         - Load full platform-specific config
+         - Build dcc compiler command
+         - Execute dcc32/dcc64/dcclinux64/dccaarm64
+         - Parse compiler output for errors
    |
    v
-4. Build compiler command
-   - Merge config file + .dproj settings
-   - Add search paths, namespaces, aliases
-   |
-   v
-5. Execute dcc32.exe/dcc64.exe/dcclinux64.exe
-   |
-   v
-6. Parse output
-   - Extract errors (E####, F####)
-   - Filter warnings (W####) and hints (H####)
-   |
-   v
-7. Return structured result to AI
+4. Return structured result to AI
 ```
 
 ## Example Usage

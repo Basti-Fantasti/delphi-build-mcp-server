@@ -17,6 +17,9 @@ from src.models import (
 )
 
 
+WINDOWS_PLATFORMS = {"Win32", "Win64", "Win64x"}
+
+
 class MultiConfigGenerator:
     """Generates hierarchical TOML configuration from multiple build logs.
 
@@ -108,9 +111,28 @@ class MultiConfigGenerator:
         generated_files: list[str] = []
 
         if generate_separate_files:
-            # Generate separate platform-specific config files
+            # Generate separate platform-specific config files.
+            # All Windows platform logs are grouped into one minimal delphi_config.toml.
+            # Cross-compile platforms (Linux64, Android, Android64) each get their own file.
             platforms = set(k[1] for k in parsed_logs.keys())
-            for platform in sorted(platforms):
+
+            windows_platforms_found = platforms & WINDOWS_PLATFORMS
+            crosscompile_platforms = platforms - WINDOWS_PLATFORMS
+
+            if windows_platforms_found:
+                # Collect all Windows logs; pick the first one as representative
+                windows_logs = {
+                    k: v for k, v in parsed_logs.items() if k[1] in WINDOWS_PLATFORMS
+                }
+                first_windows_log = next(iter(windows_logs.values()))
+                # Generate minimal config: only [delphi] section + MSBuild comment
+                toml_content = self._generate_windows_minimal_toml(first_windows_log)
+                windows_output_path = output_dir / "delphi_config.toml"
+                with open(windows_output_path, "w", encoding="utf-8") as f:
+                    f.write(toml_content)
+                generated_files.append(str(windows_output_path.absolute()))
+
+            for platform in sorted(crosscompile_platforms):
                 # Get logs for this platform only
                 platform_logs = {
                     k: v for k, v in parsed_logs.items() if k[1] == platform
@@ -638,6 +660,55 @@ class MultiConfigGenerator:
             lines.append('"Classes" = "System.Classes"')
 
         return lines
+
+    def _generate_windows_minimal_toml(self, log_info: BuildLogInfo) -> str:
+        """Generate a minimal TOML config for Windows platforms.
+
+        Windows targets are compiled via MSBuild which does not need search paths,
+        flags, namespaces, or aliases in the config.  Only the [delphi] section
+        (root_path + version) is required so the server can locate the Delphi
+        installation.
+
+        Args:
+            log_info: BuildLogInfo from any one of the Windows build logs
+
+        Returns:
+            TOML file content as string
+        """
+        self._delphi_version = log_info.delphi_version
+
+        lines = []
+        lines.append("# Delphi Build MCP Server Configuration")
+        lines.append("#")
+        lines.append("# Auto-generated from IDE build logs (Windows platforms)")
+        lines.append(f"# Delphi Version: {log_info.delphi_version}")
+        lines.append("# Platforms: Win32, Win64, Win64x")
+        lines.append("#")
+        lines.append("# Windows targets are compiled via MSBuild.")
+        lines.append("# Search paths, flags, namespaces and aliases are managed by the .dproj file.")
+        lines.append("#")
+        lines.append("")
+
+        # [delphi] section only
+        lines.append("# " + "=" * 77)
+        lines.append("# Delphi Installation Configuration")
+        lines.append("# " + "=" * 77)
+        lines.append("[delphi]")
+        lines.append(f'version = "{log_info.delphi_version}"')
+        lines.append("")
+
+        compiler_path = log_info.compiler_path
+        root_path = compiler_path.parent.parent
+        root_path_str = self._format_path(root_path)
+
+        lines.append("# Delphi installation root directory")
+        lines.append(f'root_path = "{root_path_str}"')
+        lines.append("")
+        lines.append("# Compiler executables (auto-detected from root_path if not specified)")
+        lines.append('# compiler_win32 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc32.exe"')
+        lines.append('# compiler_win64 = "C:/Program Files (x86)/Embarcadero/Studio/23.0/bin/dcc64.exe"')
+
+        return "\n".join(lines)
 
     def _categorize_paths(
         self, paths: list[Path], log_info: BuildLogInfo

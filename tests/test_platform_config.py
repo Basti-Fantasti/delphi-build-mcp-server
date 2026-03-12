@@ -70,7 +70,18 @@ class TestFindConfigFileForPlatform:
             assert source == "platform"
 
     def test_no_platform_config_raises_error(self, monkeypatch):
-        """Test raises FileNotFoundError when no platform-specific config exists."""
+        """Test raises FileNotFoundError when no platform-specific or generic config exists."""
+        monkeypatch.delenv("DELPHI_CONFIG", raising=False)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            # No config files at all
+
+            with pytest.raises(FileNotFoundError, match="delphi_config_win64.toml"):
+                find_config_file_for_platform(platform="Win64", base_dir=base_dir)
+
+    def test_win64_generic_fallback_used_when_no_platform_specific(self, monkeypatch):
+        """Test Win64 falls back to generic config when no platform-specific config exists."""
         monkeypatch.delenv("DELPHI_CONFIG", raising=False)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,8 +90,9 @@ class TestFindConfigFileForPlatform:
             generic_config = base_dir / "delphi_config.toml"
             generic_config.write_text("# Generic config")
 
-            with pytest.raises(FileNotFoundError, match="delphi_config_win64.toml"):
-                find_config_file_for_platform(platform="Win64", base_dir=base_dir)
+            path, source = find_config_file_for_platform(platform="Win64", base_dir=base_dir)
+            assert path == generic_config
+            assert source == "generic"
 
     def test_no_platform_raises_error(self, monkeypatch):
         """Test raises FileNotFoundError when no platform is specified."""

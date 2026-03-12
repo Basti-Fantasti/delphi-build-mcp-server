@@ -130,7 +130,12 @@ class TestConfigExtender:
     def test_extend_adds_new_platform(
         self, temp_config_file, temp_build_log_win64x, temp_output_file
     ):
-        """Test that extending config adds a new platform."""
+        """Test that extending config with a Windows platform succeeds.
+
+        Windows targets (Win32/Win64/Win64x) are compiled via MSBuild.  The
+        extender therefore only updates the [delphi] root_path/version and does
+        NOT add system lib paths or search paths for Windows platforms.
+        """
         extender = ConfigExtender(use_env_vars=False)
         result = extender.extend_from_build_log(
             existing_config_path=temp_config_file,
@@ -139,18 +144,18 @@ class TestConfigExtender:
         )
 
         assert result.success
-        assert "Win64x" in result.platforms_added
 
-        # Read output and verify Win64x lib paths added
+        # Delphi root_path is already present in the sample config so nothing changes
+        # No system lib paths should be added for Windows platforms
         with open(temp_output_file, "r") as f:
             content = f.read()
-        assert "lib_win64x_debug" in content
-        assert "lib_win64x_release" in content
+        assert "lib_win64x_debug" not in content
+        assert "lib_win64x_release" not in content
 
     def test_extend_skips_duplicates(
         self, temp_config_file, temp_build_log_win64x, temp_output_file
     ):
-        """Test that duplicate paths are skipped."""
+        """Test that Windows platform extension skips all search paths."""
         extender = ConfigExtender(use_env_vars=False)
         result = extender.extend_from_build_log(
             existing_config_path=temp_config_file,
@@ -159,8 +164,9 @@ class TestConfigExtender:
         )
 
         assert result.success
-        # Spring4D and DUnitX are in both config and build log - should be skipped
-        assert result.paths_skipped > 0
+        # Windows platforms skip all path merging — paths_skipped stays 0
+        assert result.paths_skipped == 0
+        assert result.paths_added == 0
 
     def test_extend_preserves_existing(
         self, temp_config_file, temp_build_log_win64x, temp_output_file
@@ -188,7 +194,11 @@ class TestConfigExtender:
     def test_extend_adds_new_libraries(
         self, temp_config_file, temp_build_log_win64x, temp_output_file
     ):
-        """Test that new library paths are added."""
+        """Test that Windows platform extension does NOT add library paths.
+
+        Windows targets use MSBuild which manages search paths through the
+        .dproj file, so no third-party library paths are merged.
+        """
         extender = ConfigExtender(use_env_vars=False)
         result = extender.extend_from_build_log(
             existing_config_path=temp_config_file,
@@ -197,12 +207,13 @@ class TestConfigExtender:
         )
 
         assert result.success
-        assert result.paths_added > 0
+        # Windows platform: no library paths are added
+        assert result.paths_added == 0
 
-        # Read output and verify NewLib was added
+        # NewLib from the build log should NOT appear in the config
         with open(temp_output_file, "r") as f:
             content = f.read()
-        assert "NewLib" in content or "newlib" in content
+        assert "NewLib" not in content and "newlib" not in content
 
     def test_path_normalization(self):
         """Test case-insensitive path comparison."""
@@ -279,8 +290,11 @@ class TestConfigExtender:
         with open(temp_config_file, "r") as f:
             updated_content = f.read()
 
-        # Content should be different (extended)
-        assert "lib_win64x" in updated_content
+        # File should have been (re-)written successfully
+        # Windows platform: lib_win64x paths are NOT added (MSBuild manages them)
+        assert "lib_win64x" not in updated_content
+        # Existing paths must still be present
+        assert "lib_win32_release" in updated_content
 
     def test_namespace_merge(self, temp_config_file, temp_build_log_win64x, temp_output_file):
         """Test that namespaces are merged without duplicates."""
